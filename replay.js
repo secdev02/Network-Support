@@ -8,6 +8,8 @@ const bodyInput = document.getElementById('bodyInput');
 const sendBtn = document.getElementById('sendBtn');
 const responsePanel = document.getElementById('responsePanel');
 const launchIncognitoBtn = document.getElementById('launchIncognitoBtn');
+const incognitoCheckbox = document.getElementById('incognitoCheckbox');
+const regularModeWarning = document.getElementById('regularModeWarning');
 const viewCookiesBtn = document.getElementById('viewCookiesBtn');
 const exportCookiesBtn = document.getElementById('exportCookiesBtn');
 const importCookiesBtn = document.getElementById('importCookiesBtn');
@@ -54,6 +56,13 @@ cookiesFileInput.addEventListener('change', (e) => {
   if (e.target.files.length > 0) {
     importCookies(e.target.files[0]);
   }
+});
+
+// Update button text when checkbox changes
+incognitoCheckbox.addEventListener('change', () => {
+  updateIncognitoButton();
+  // Show warning if regular mode selected
+  regularModeWarning.style.display = incognitoCheckbox.checked ? 'none' : 'block';
 });
 
 // Method selector
@@ -173,12 +182,15 @@ function extractCookies() {
 
 // Update incognito button state
 function updateIncognitoButton() {
+  const isIncognito = incognitoCheckbox.checked;
+  const mode = isIncognito ? 'Incognito' : 'Regular';
+  
   if (cookies.length > 0) {
     launchIncognitoBtn.disabled = false;
-    launchIncognitoBtn.textContent = '🕵️ Launch Incognito with ' + cookies.length + ' Cookie' + (cookies.length !== 1 ? 's' : '');
+    launchIncognitoBtn.textContent = '🕵️ Launch ' + mode + ' with ' + cookies.length + ' Cookie' + (cookies.length !== 1 ? 's' : '');
   } else {
     launchIncognitoBtn.disabled = true;
-    launchIncognitoBtn.textContent = '🕵️ No cookies found in HAR';
+    launchIncognitoBtn.textContent = '🕵️ No cookies found';
   }
 }
 
@@ -632,9 +644,12 @@ function escapeHtml(text) {
 // Launch incognito session with cookies
 async function launchIncognitoSession() {
   if (cookies.length === 0) {
-    alert('No cookies found in HAR file');
+    alert('No cookies to import. Load a HAR file or import cookies first.');
     return;
   }
+  
+  const useIncognito = incognitoCheckbox.checked;
+  const mode = useIncognito ? 'incognito' : 'regular';
   
   // Show confirmation with cookie details
   const domainCount = {};
@@ -647,10 +662,12 @@ async function launchIncognitoSession() {
     .map(([domain, count]) => domain + ' (' + count + ' cookie' + (count !== 1 ? 's' : '') + ')')
     .join('\n');
   
+  const modeText = useIncognito ? 'incognito/private' : 'regular';
   const confirmed = confirm(
-    'Launch incognito session with ' + cookies.length + ' cookie(s)?\n\n' +
+    'Launch ' + modeText + ' window with ' + cookies.length + ' cookie(s)?\n\n' +
     'Domains:\n' + domainList + '\n\n' +
     'You will browse as the user from the HAR file.\n' +
+    (useIncognito ? 'Incognito mode: Session isolated from normal browsing.\n' : 'Regular mode: Cookies will be in your main browser profile.\n') +
     'Only use this in authorized test environments.'
   );
   
@@ -678,31 +695,38 @@ async function launchIncognitoSession() {
     launchIncognitoBtn.disabled = true;
     launchIncognitoBtn.textContent = 'Launching...';
     
-    // Create incognito window
-    const incognitoWindow = await chrome.windows.create({
+    // Create window (incognito or regular based on checkbox)
+    const newWindow = await chrome.windows.create({
       url: 'about:blank',
-      incognito: true,
+      incognito: useIncognito,
       focused: true,
       width: 1200,
       height: 800
     });
     
-    // Get the incognito tab
-    const tabs = await chrome.tabs.query({ windowId: incognitoWindow.id });
-    const incognitoTab = tabs[0];
+    // Get the tab
+    const tabs = await chrome.tabs.query({ windowId: newWindow.id });
+    const newTab = tabs[0];
     
     // Wait for window to initialize
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // Get all cookie stores to find the incognito one
+    // Get all cookie stores to find the correct one
     const allStores = await chrome.cookies.getAllCookieStores();
-    const incognitoStore = allStores.find(store => 
-      store.tabIds.includes(incognitoTab.id)
+    const targetStore = allStores.find(store => 
+      store.tabIds.includes(newTab.id)
     );
     
-    if (!incognitoStore) {
-      throw new Error('Could not find incognito cookie store');
+    if (!targetStore) {
+      throw new Error('Could not find cookie store for ' + mode + ' window');
     }
+    
+    console.log('=== Cookie Import Debug ===');
+    console.log('Window mode:', mode);
+    console.log('Window ID:', newWindow.id);
+    console.log('Tab ID:', newTab.id);
+    console.log('Cookie store ID:', targetStore.id);
+    console.log('Total cookies to import:', cookies.length);
     
     // Set all cookies
     let successCount = 0;
@@ -711,8 +735,11 @@ async function launchIncognitoSession() {
     const errors = [];
     
     console.log('=== Cookie Import Debug ===');
+    console.log('Window mode:', mode);
+    console.log('Window ID:', newWindow.id);
+    console.log('Tab ID:', newTab.id);
+    console.log('Cookie store ID:', targetStore.id);
     console.log('Total cookies to import:', cookies.length);
-    console.log('Incognito store ID:', incognitoStore.id);
     
     for (const cookie of cookies) {
       try {
@@ -735,7 +762,7 @@ async function launchIncognitoSession() {
           secure: cookie.secure || false,
           httpOnly: cookie.httpOnly || false,
           sameSite: cookie.sameSite || 'no_restriction',
-          storeId: incognitoStore.id
+          storeId: targetStore.id
         };
         
         // Only set domain if it starts with dot (domain cookie)
@@ -805,7 +832,7 @@ async function launchIncognitoSession() {
         const readCookies = await chrome.cookies.getAll({
           url: cookieUrl,
           name: cookie.name,
-          storeId: incognitoStore.id
+          storeId: targetStore.id
         });
         
         if (readCookies && readCookies.length > 0) {
@@ -821,20 +848,22 @@ async function launchIncognitoSession() {
     console.log('Verified:', verifiedCount, '/', cookies.length, 'cookies');
     
     // Navigate to start URL after cookies are set and verified
-    await chrome.tabs.update(incognitoTab.id, { url: startUrl });
+    await chrome.tabs.update(newTab.id, { url: startUrl });
     
     // Show results
+    const windowType = useIncognito ? 'Incognito' : 'Regular';
     const resultHtml = 
       '<div class="info-box">' +
-      '<strong>✅ Incognito Session Launched</strong><br><br>' +
+      '<strong>✅ ' + windowType + ' Session Launched</strong><br><br>' +
+      'Window mode: ' + windowType + '<br>' +
       'Cookies imported: ' + successCount + ' / ' + cookies.length + '<br>' +
       'Cookies verified: ' + verifiedCount + ' / ' + successCount + '<br>' +
       'URL: <code>' + escapeHtml(startUrl) + '</code><br><br>' +
       '<strong>What now?</strong><br>' +
-      '1. The incognito window has opened<br>' +
+      '1. The ' + windowType.toLowerCase() + ' window has opened<br>' +
       '2. Cookies are set - you should be logged in<br>' +
       '3. Navigate to reproduce the issue<br>' +
-      '4. Close the incognito window when done<br><br>' +
+      '4. Close the window when done<br><br>' +
       '<strong>Debug Info:</strong><br>' +
       'Check browser console (F12) for detailed cookie logs.<br><br>' +
       '⚠️ <strong>Remember:</strong> You are acting as the user - any actions you take will be as them!' +
@@ -858,14 +887,12 @@ async function launchIncognitoSession() {
       responsePanel.innerHTML = resultHtml;
     }
     
-    launchIncognitoBtn.textContent = '🕵️ Launch Another Session';
-    launchIncognitoBtn.disabled = false;
+    updateIncognitoButton();
     
   } catch (error) {
-    console.error('Incognito session error:', error);
-    alert('Failed to launch incognito session: ' + error.message);
-    launchIncognitoBtn.textContent = '🕵️ Launch Incognito with Cookies';
-    launchIncognitoBtn.disabled = false;
+    console.error('Session launch error:', error);
+    alert('Failed to launch session: ' + error.message);
+    updateIncognitoButton();
   }
 }
 

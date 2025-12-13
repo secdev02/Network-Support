@@ -354,13 +354,30 @@
   <div class="container">
     <div class="sidebar">
       <div class="section">
-        <div class="section-title">Launch Incognito Session</div>
+        <div class="section-title">Launch Session</div>
         <div style="padding: 12px; background: #fff; border: 1px solid #dadce0; border-radius: 4px; margin-bottom: 16px;">
           <div style="font-size: 12px; color: #5f6368; margin-bottom: 8px;">
-            Import cookies and browse as the user in a safe isolated session
+            Import cookies and browse as the user
           </div>
+          
+          <div style="margin-bottom: 12px; padding: 8px; background: #f8f9fa; border-radius: 4px;">
+            <label style="display: flex; align-items: center; cursor: pointer; font-size: 12px;">
+              <input type="checkbox" id="incognitoCheckbox" checked style="margin-right: 8px;">
+              <span>Launch in Incognito/Private Mode (recommended)</span>
+            </label>
+            <div style="font-size: 11px; color: #5f6368; margin-top: 4px; margin-left: 24px;">
+              Isolates session from your normal browsing
+            </div>
+          </div>
+          
+          <div id="regularModeWarning" style="display: none; margin-bottom: 12px; padding: 8px; background: #fef7e0; border-left: 3px solid #f9ab00; border-radius: 4px;">
+            <div style="font-size: 11px; color: #3c4043;">
+              ⚠️ <strong>Regular Mode:</strong> Cookies will be set in your main browser profile. Use only in isolated test browsers.
+            </div>
+          </div>
+          
           <button id="launchIncognitoBtn" class="send-btn" style="width: 100%; font-size: 12px; padding: 8px; margin-bottom: 8px;">
-            🕵️ Launch Incognito with Cookies
+            🕵️ Launch Session with Cookies
           </button>
           <div style="display: flex; gap: 8px;">
             <button id="viewCookiesBtn" style="flex: 1; padding: 6px; border: 1px solid #dadce0; background: #fff; border-radius: 4px; cursor: pointer; font-size: 11px;">

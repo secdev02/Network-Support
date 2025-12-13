@@ -9,8 +9,11 @@
 3. Select `test-cookies.json`
 4. You should see: "✅ Cookies Imported - Loaded: 3 cookie(s)"
 5. Click "View Cookies" to verify they're loaded
-6. Click "Launch Incognito with Cookies"
-7. Open browser console (F12) to see debug logs
+6. **Choose window mode:**
+   - Keep "Launch in Incognito/Private Mode" checked (recommended)
+   - OR uncheck to use regular window (will affect your main browser)
+7. Click "Launch Session with Cookies"
+8. Open browser console (F12) to see debug logs
 
 ### 2. Test with Real HAR File
 
@@ -54,10 +57,32 @@ Look for error messages like:
 - "Skipping expired cookie" - Cookie expiration date has passed
 - Specific Chrome error messages about domain/secure mismatches
 
-### 4. Common Issues & Solutions
+### 4. Window Mode Selection
+
+**Incognito/Private Mode (Default - Recommended):**
+- ✅ Isolated from your normal browsing
+- ✅ Clean slate, no existing cookies
+- ✅ Easy cleanup (close window)
+- ✅ Safe for testing production cookies
+- ✅ No impact on your regular sessions
+- ❌ Requires "Allow in Incognito" permission
+
+**Regular Mode:**
+- ✅ Works without incognito permission
+- ✅ Useful for testing in specific browser profiles
+- ❌ Cookies persist in your main browser
+- ❌ Can interfere with your regular browsing
+- ❌ Harder to clean up
+- ⚠️ Only use in isolated test browsers
+
+**When to use each:**
+- Incognito: Almost always - safest option
+- Regular: Only when testing specific browser profiles or when incognito isn't available
+
+### 5. Common Issues & Solutions
 
 **Issue: All cookies fail to import**
-- Check: Is "Allow in Incognito" enabled for the extension?
+- Check: Is "Allow in Incognito" enabled for the extension? (if using incognito mode)
 - Fix: chrome://extensions/ → Extension Details → Enable "Allow in Incognito"
 
 **Issue: Secure cookies fail on HTTP domains**
@@ -77,7 +102,7 @@ Look for error messages like:
 - Check: Cookie sameSite value
 - Fix: Valid values are: 'strict', 'lax', 'no_restriction' (not 'none')
 
-### 5. Manual Cookie Verification
+### 6. Manual Cookie Verification
 
 After launching incognito session:
 
@@ -87,7 +112,7 @@ After launching incognito session:
 4. Verify cookies are present
 5. Check Name, Value, Domain, Path, Secure, HttpOnly, SameSite
 
-### 6. Cookie Structure Reference
+### 7. Cookie Structure Reference
 
 **Correct JSON format:**
 
@@ -123,11 +148,12 @@ After launching incognito session:
 - `example.com` - Host-only cookie (only on exact domain)
 - `www.example.com` - Host-only for www subdomain
 
-### 7. Expected Console Output
+### 8. Expected Console Output
 
 **Successful import:**
 ```
 === Cookie Import Debug ===
+Window mode: incognito
 Total cookies to import: 15
 Incognito store ID: 1
 Setting cookie: session_id for domain: app.example.com
@@ -152,19 +178,22 @@ Errors: [
 ]
 ```
 
-### 8. Testing Checklist
+### 9. Testing Checklist
 
 - [ ] Import test-cookies.json successfully
 - [ ] View cookies shows correct count and details
 - [ ] Export cookies creates valid JSON
 - [ ] Reimport exported cookies works
-- [ ] Launch incognito opens window
+- [ ] Checkbox toggles between Incognito/Regular
+- [ ] Warning appears when regular mode selected
+- [ ] Launch session opens window (incognito mode)
+- [ ] Launch session opens window (regular mode)
 - [ ] Console shows all cookies set successfully
 - [ ] Console shows all cookies verified
-- [ ] DevTools in incognito shows cookies present
+- [ ] DevTools in window shows cookies present
 - [ ] Navigate to domain shows cookies sent in requests
 
-### 9. Troubleshooting Commands
+### 10. Troubleshooting Commands
 
 **Check incognito store:**
 ```javascript
@@ -187,7 +216,7 @@ chrome.cookies.get({
 }).then(cookie => console.log(cookie));
 ```
 
-### 10. Success Criteria
+### 11. Success Criteria
 
 Cookie import is working correctly when:
 
