@@ -41,10 +41,16 @@
 1. Click the extension icon
 2. Click "Session Replay" button
 3. Load a HAR file
-4. Select extracted token/session
-5. Configure and send test request
-6. View response in real-time
-7. **Use case**: Replay customer's exact session to reproduce issues
+4. **Option A - Manual API Testing:**
+   - Select extracted token/session
+   - Configure and send test request
+   - View response in real-time
+5. **Option B - Browse as User:**
+   - Click "🕵️ Launch Incognito with Cookies"
+   - Incognito window opens with user's session
+   - Browse as them to reproduce issues
+   - Safe & isolated testing environment
+6. **Use case**: Reproduce customer's exact session to diagnose issues
 
 That's it! 🎉
 

@@ -7,9 +7,12 @@ const urlInput = document.getElementById('urlInput');
 const bodyInput = document.getElementById('bodyInput');
 const sendBtn = document.getElementById('sendBtn');
 const responsePanel = document.getElementById('responsePanel');
+const launchIncognitoBtn = document.getElementById('launchIncognitoBtn');
+const viewCookiesBtn = document.getElementById('viewCookiesBtn');
 
 let harData = null;
 let sessions = [];
+let cookies = [];
 let selectedSession = null;
 let selectedMethod = 'GET';
 
@@ -22,6 +25,16 @@ harFileInput.addEventListener('change', (e) => {
   if (e.target.files.length > 0) {
     loadHARFile(e.target.files[0]);
   }
+});
+
+// Launch incognito session
+launchIncognitoBtn.addEventListener('click', async () => {
+  await launchIncognitoSession();
+});
+
+// View cookies
+viewCookiesBtn.addEventListener('click', () => {
+  displayCookieList();
 });
 
 // Method selector
@@ -52,7 +65,9 @@ function loadHARFile(file) {
       }
       
       extractSessions();
+      extractCookies();
       displaySessions();
+      updateIncognitoButton();
       
     } catch (error) {
       alert('Error parsing HAR file: ' + error.message);
@@ -60,6 +75,92 @@ function loadHARFile(file) {
   };
   
   reader.readAsText(file);
+}
+
+// Extract cookies from HAR
+function extractCookies() {
+  cookies = [];
+  const cookieMap = new Map();
+  
+  harData.log.entries.forEach((entry, index) => {
+    // Extract request cookies
+    if (entry.request.cookies) {
+      entry.request.cookies.forEach(cookie => {
+        const key = cookie.name + ':' + cookie.value;
+        if (!cookieMap.has(key)) {
+          cookieMap.set(key, true);
+          
+          // Try to determine domain from URL
+          let domain = '';
+          try {
+            const url = new URL(entry.request.url);
+            domain = url.hostname;
+          } catch (e) {
+            domain = 'unknown';
+          }
+          
+          cookies.push({
+            name: cookie.name,
+            value: cookie.value,
+            domain: domain,
+            path: '/',
+            url: entry.request.url,
+            secure: entry.request.url.startsWith('https'),
+            httpOnly: false,
+            sameSite: 'no_restriction',
+            sourceRequest: index
+          });
+        }
+      });
+    }
+    
+    // Extract response cookies (Set-Cookie)
+    if (entry.response.cookies) {
+      entry.response.cookies.forEach(cookie => {
+        const key = cookie.name + ':' + cookie.value;
+        if (!cookieMap.has(key)) {
+          cookieMap.set(key, true);
+          
+          let domain = cookie.domain || '';
+          let url = entry.request.url;
+          
+          // If no domain in cookie, extract from URL
+          if (!domain) {
+            try {
+              const urlObj = new URL(entry.request.url);
+              domain = urlObj.hostname;
+            } catch (e) {
+              domain = 'unknown';
+            }
+          }
+          
+          cookies.push({
+            name: cookie.name,
+            value: cookie.value,
+            domain: domain,
+            path: cookie.path || '/',
+            url: url,
+            secure: cookie.secure || entry.request.url.startsWith('https'),
+            httpOnly: cookie.httpOnly || false,
+            sameSite: cookie.sameSite ? cookie.sameSite.toLowerCase().replace('-', '_') : 'no_restriction',
+            expirationDate: cookie.expires ? new Date(cookie.expires).getTime() / 1000 : undefined,
+            sourceRequest: index
+          });
+        }
+      });
+    }
+  });
+}
+
+// Update incognito button state
+function updateIncognitoButton() {
+  if (cookies.length > 0) {
+    launchIncognitoBtn.disabled = false;
+    launchIncognitoBtn.textContent = '🕵️ Launch Incognito with ' + cookies.length + ' Cookie' + (cookies.length !== 1 ? 's' : '');
+  } else {
+    launchIncognitoBtn.disabled = true;
+    launchIncognitoBtn.textContent = '🕵️ No cookies found in HAR';
+  }
 }
 
 // Extract sessions and tokens from HAR
@@ -507,4 +608,196 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// Launch incognito session with cookies
+async function launchIncognitoSession() {
+  if (cookies.length === 0) {
+    alert('No cookies found in HAR file');
+    return;
+  }
+  
+  // Show confirmation with cookie details
+  const domainCount = {};
+  cookies.forEach(cookie => {
+    const domain = cookie.domain;
+    domainCount[domain] = (domainCount[domain] || 0) + 1;
+  });
+  
+  const domainList = Object.entries(domainCount)
+    .map(([domain, count]) => domain + ' (' + count + ' cookie' + (count !== 1 ? 's' : '') + ')')
+    .join('\n');
+  
+  const confirmed = confirm(
+    'Launch incognito session with ' + cookies.length + ' cookie(s)?\n\n' +
+    'Domains:\n' + domainList + '\n\n' +
+    'You will browse as the user from the HAR file.\n' +
+    'Only use this in authorized test environments.'
+  );
+  
+  if (!confirmed) return;
+  
+  // Get the primary domain (most common domain in cookies)
+  let primaryDomain = '';
+  let maxCount = 0;
+  for (const [domain, count] of Object.entries(domainCount)) {
+    if (count > maxCount) {
+      maxCount = count;
+      primaryDomain = domain;
+    }
+  }
+  
+  // Determine protocol (prefer https)
+  const hasHttps = cookies.some(c => c.secure);
+  const protocol = hasHttps ? 'https://' : 'http://';
+  const startUrl = protocol + primaryDomain;
+  
+  try {
+    launchIncognitoBtn.disabled = true;
+    launchIncognitoBtn.textContent = 'Launching...';
+    
+    // Create incognito window
+    const incognitoWindow = await chrome.windows.create({
+      url: startUrl,
+      incognito: true,
+      focused: true,
+      width: 1200,
+      height: 800
+    });
+    
+    // Wait a moment for the window to initialize
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Set all cookies
+    let successCount = 0;
+    let failCount = 0;
+    const errors = [];
+    
+    for (const cookie of cookies) {
+      try {
+        // Build cookie URL
+        const protocol = cookie.secure ? 'https://' : 'http://';
+        const cookieUrl = protocol + cookie.domain + cookie.path;
+        
+        const cookieDetails = {
+          url: cookieUrl,
+          name: cookie.name,
+          value: cookie.value,
+          domain: cookie.domain.startsWith('.') ? cookie.domain : undefined,
+          path: cookie.path,
+          secure: cookie.secure,
+          httpOnly: cookie.httpOnly,
+          sameSite: cookie.sameSite,
+          storeId: incognitoWindow.id.toString()
+        };
+        
+        // Add expiration if present
+        if (cookie.expirationDate) {
+          cookieDetails.expirationDate = cookie.expirationDate;
+        }
+        
+        await chrome.cookies.set(cookieDetails);
+        successCount++;
+        
+      } catch (error) {
+        failCount++;
+        errors.push({
+          cookie: cookie.name,
+          error: error.message
+        });
+      }
+    }
+    
+    // Show results
+    const resultHtml = 
+      '<div class="info-box">' +
+      '<strong>✅ Incognito Session Launched</strong><br><br>' +
+      'Cookies imported: ' + successCount + ' / ' + cookies.length + '<br>' +
+      'URL: <code>' + escapeHtml(startUrl) + '</code><br><br>' +
+      '<strong>What now?</strong><br>' +
+      '1. Browse to the application in the incognito window<br>' +
+      '2. You will be logged in as the user from the HAR file<br>' +
+      '3. Reproduce the issue they reported<br>' +
+      '4. Close the incognito window when done<br><br>' +
+      '⚠️ <strong>Remember:</strong> You are acting as the user - any actions you take will be as them!' +
+      '</div>';
+    
+    if (failCount > 0) {
+      const errorHtml = 
+        '<div class="warning-box" style="margin-top: 12px;">' +
+        '<strong>⚠️ Warning:</strong> ' + failCount + ' cookie(s) failed to import<br>' +
+        'This may affect functionality. Check console for details.' +
+        '</div>';
+      responsePanel.innerHTML = resultHtml + errorHtml;
+      console.error('Cookie import errors:', errors);
+    } else {
+      responsePanel.innerHTML = resultHtml;
+    }
+    
+    launchIncognitoBtn.textContent = '🕵️ Launch Another Session';
+    launchIncognitoBtn.disabled = false;
+    
+  } catch (error) {
+    alert('Failed to launch incognito session: ' + error.message);
+    launchIncognitoBtn.textContent = '🕵️ Launch Incognito with Cookies';
+    launchIncognitoBtn.disabled = false;
+  }
+}
+
+// Display cookie list
+function displayCookieList() {
+  if (cookies.length === 0) {
+    responsePanel.innerHTML = 
+      '<div class="empty-state">' +
+      '<div class="empty-icon">🍪</div>' +
+      '<div>No cookies found in HAR file</div>' +
+      '</div>';
+    return;
+  }
+  
+  // Group cookies by domain
+  const byDomain = {};
+  cookies.forEach(cookie => {
+    if (!byDomain[cookie.domain]) {
+      byDomain[cookie.domain] = [];
+    }
+    byDomain[cookie.domain].push(cookie);
+  });
+  
+  let html = '<div class="info-box">' +
+    '<strong>Cookies to Import (' + cookies.length + ' total)</strong><br>' +
+    'These will be set in the incognito session' +
+    '</div>';
+  
+  for (const [domain, domainCookies] of Object.entries(byDomain)) {
+    html += '<div style="margin-top: 16px; margin-bottom: 8px;">' +
+            '<strong style="color: #1a73e8;">' + escapeHtml(domain) + '</strong> ' +
+            '<span style="color: #5f6368; font-size: 11px;">(' + domainCookies.length + ' cookie' + (domainCookies.length !== 1 ? 's' : '') + ')</span>' +
+            '</div>';
+    
+    html += '<div class="headers-list">';
+    
+    domainCookies.forEach(cookie => {
+      const flags = [];
+      if (cookie.secure) flags.push('Secure');
+      if (cookie.httpOnly) flags.push('HttpOnly');
+      if (cookie.sameSite !== 'no_restriction') flags.push('SameSite=' + cookie.sameSite);
+      
+      const truncatedValue = cookie.value.length > 60 
+        ? cookie.value.substring(0, 60) + '...' 
+        : cookie.value;
+      
+      html += '<div class="header-row">' +
+              '<div class="header-name">' + escapeHtml(cookie.name) + '</div>' +
+              '<div class="header-value">' + 
+              escapeHtml(truncatedValue) +
+              (flags.length > 0 ? '<br><span style="color: #5f6368; font-size: 10px;">' + flags.join(', ') + '</span>' : '') +
+              '</div>' +
+              '</div>';
+    });
+    
+    html += '</div>';
+  }
+  
+  responsePanel.innerHTML = html;
 }

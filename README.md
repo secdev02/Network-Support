@@ -121,10 +121,21 @@ A comprehensive Chrome extension for capturing, analyzing, and debugging all net
    - **OAuth tokens** from response bodies (access_token, refresh_token)
    - **Basic auth** credentials
    - **Custom auth headers** (X-Auth-Token, X-API-Key, etc.)
-5. Select a session/token from the sidebar
-6. Configure request (URL, method, body)
-7. Click "Send Request" to replay with that session
-8. View response in real-time
+5. **Two modes:**
+
+   **A) Manual API Testing:**
+   - Select a session/token from the sidebar
+   - Configure request (URL, method, body)
+   - Click "Send Request" to replay with that session
+   - View response in real-time
+
+   **B) Launch Incognito Session (NEW!):**
+   - Click "🕵️ Launch Incognito with Cookies"
+   - Extension opens new incognito window
+   - All cookies automatically imported
+   - **Browse as the user** - you're now logged in as them
+   - Reproduce issues in their exact session state
+   - Safe and isolated (incognito mode)
 
 **Use cases:**
 - **Reproduce customer issues**: Use their exact session to see what they're seeing
@@ -132,12 +143,22 @@ A comprehensive Chrome extension for capturing, analyzing, and debugging all net
 - **Debug authorization**: Verify permissions and access levels
 - **Test API endpoints**: Use production tokens in safe test environment
 - **Validate OAuth flows**: Replay token exchanges and refresh flows
+- **Browse as user**: See exact UI state, permissions, and data they see
+
+**Incognito session benefits:**
+- ✅ **Complete isolation**: Separate from your normal browsing
+- ✅ **Auto-login**: All cookies set automatically
+- ✅ **Safe testing**: No impact on your regular session
+- ✅ **Multiple domains**: Handles cookies across all domains
+- ✅ **Preserves flags**: HttpOnly, Secure, SameSite all maintained
+- ✅ **Easy cleanup**: Close window to remove all session data
 
 **Security warnings:**
 - Only use in authorized test/staging environments
 - Never replay production tokens without permission
 - HAR files contain live credentials - handle securely
 - Tokens may have side effects when replayed
+- You ARE the user - actions taken are as them
 
 ## What Gets Captured
 
@@ -373,6 +394,7 @@ The session replay tool is perfect for:
 - **Testing token expiration**: See if tokens are still valid
 - **Verifying permissions**: Test what a user can/cannot access
 - **API troubleshooting**: Replay failed requests to diagnose issues
+- **Browser as user**: Launch incognito session to see their exact experience
 
 **Common workflows:**
 
@@ -394,6 +416,22 @@ The session replay tool is perfect for:
    - Test various API endpoints
    - Confirm what user can access
 
+4. **Browse as the user (NEW!):**
+   - Load customer's HAR file
+   - Click "View Cookies to Import" to see what will be set
+   - Click "🕵️ Launch Incognito with Cookies"
+   - Incognito window opens with all cookies set
+   - Navigate to the application - you're logged in as them
+   - Reproduce the exact issue they reported
+   - See their permissions, data, and UI state
+   - Close window when done (all cookies removed)
+
+5. **Debug complex multi-step flows:**
+   - Launch incognito session with user's cookies
+   - Walk through their workflow step by step
+   - See where it breaks or behaves differently
+   - Check console for errors they might not report
+
 **Supported auth types:**
 - Bearer tokens (OAuth 2.0)
 - API keys (header or query parameter)
@@ -408,6 +446,12 @@ The session replay tool is perfect for:
 - Get authorization before replaying production tokens
 - Be aware tokens may trigger actions (emails, notifications, etc.)
 - Check token expiration before replaying
+- Use incognito mode to isolate from your normal session
+- Remember: in incognito session, you ARE that user - any actions are as them
+
+**📖 For complete guide on Incognito Session feature, see [INCOGNITO_GUIDE.md](INCOGNITO_GUIDE.md)**
+
+### Using HAR Analyzer
 
 The HAR analyzer is perfect for:
 - **Post-mortem debugging**: Load exported HAR files

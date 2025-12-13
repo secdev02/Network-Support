@@ -28,7 +28,15 @@ You should see:
 - ✅ A purple shield icon
 - ✅ No error messages
 
-#### Step 5: Pin the Extension (Optional but Recommended)
+#### Step 5: Enable in Incognito (Important!)
+For Session Replay features to work:
+1. Find "Network Support Extension" in `chrome://extensions/`
+2. Click "Details"
+3. Scroll down to "Allow in Incognito"
+4. Toggle it ON
+5. This allows the extension to set cookies in incognito windows
+
+#### Step 6: Pin the Extension (Optional but Recommended)
 1. Click the puzzle piece icon 🧩 in Chrome's toolbar
 2. Find "Network Support Extension"
 3. Click the pin icon 📌

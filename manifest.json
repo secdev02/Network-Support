@@ -6,11 +6,13 @@
   "permissions": [
     "storage",
     "debugger",
-    "tabs"
+    "tabs",
+    "cookies"
   ],
   "host_permissions": [
     "<all_urls>"
   ],
+  "incognito": "split",
   "background": {
     "service_worker": "background.js"
   },
