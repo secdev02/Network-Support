@@ -9,6 +9,9 @@ const sendBtn = document.getElementById('sendBtn');
 const responsePanel = document.getElementById('responsePanel');
 const launchIncognitoBtn = document.getElementById('launchIncognitoBtn');
 const viewCookiesBtn = document.getElementById('viewCookiesBtn');
+const exportCookiesBtn = document.getElementById('exportCookiesBtn');
+const importCookiesBtn = document.getElementById('importCookiesBtn');
+const cookiesFileInput = document.getElementById('cookiesFileInput');
 
 let harData = null;
 let sessions = [];
@@ -35,6 +38,22 @@ launchIncognitoBtn.addEventListener('click', async () => {
 // View cookies
 viewCookiesBtn.addEventListener('click', () => {
   displayCookieList();
+});
+
+// Export cookies
+exportCookiesBtn.addEventListener('click', () => {
+  exportCookies();
+});
+
+// Import cookies
+importCookiesBtn.addEventListener('click', () => {
+  cookiesFileInput.click();
+});
+
+cookiesFileInput.addEventListener('change', (e) => {
+  if (e.target.files.length > 0) {
+    importCookies(e.target.files[0]);
+  }
 });
 
 // Method selector
@@ -688,7 +707,12 @@ async function launchIncognitoSession() {
     // Set all cookies
     let successCount = 0;
     let failCount = 0;
+    let verifiedCount = 0;
     const errors = [];
+    
+    console.log('=== Cookie Import Debug ===');
+    console.log('Total cookies to import:', cookies.length);
+    console.log('Incognito store ID:', incognitoStore.id);
     
     for (const cookie of cookies) {
       try {
@@ -724,12 +748,29 @@ async function launchIncognitoSession() {
           const now = Date.now() / 1000;
           if (cookie.expirationDate > now) {
             cookieDetails.expirationDate = cookie.expirationDate;
+          } else {
+            console.warn('Skipping expired cookie:', cookie.name, 'expired at', new Date(cookie.expirationDate * 1000));
           }
         }
         
+        console.log('Setting cookie:', cookie.name, 'for domain:', cookieDomain);
+        console.log('Cookie details:', cookieDetails);
+        
         // Set the cookie
-        await chrome.cookies.set(cookieDetails);
-        successCount++;
+        const result = await chrome.cookies.set(cookieDetails);
+        
+        if (result) {
+          console.log('✓ Cookie set successfully:', cookie.name);
+          successCount++;
+        } else {
+          console.error('✗ Cookie set returned null:', cookie.name);
+          failCount++;
+          errors.push({
+            cookie: cookie.name,
+            domain: cookie.domain,
+            error: 'chrome.cookies.set returned null'
+          });
+        }
         
       } catch (error) {
         failCount++;
@@ -738,11 +779,48 @@ async function launchIncognitoSession() {
           domain: cookie.domain,
           error: error.message
         });
-        console.error('Failed to set cookie:', cookie.name, error);
+        console.error('✗ Failed to set cookie:', cookie.name, 'Error:', error.message);
+        console.error('Cookie data:', cookie);
       }
     }
     
-    // Navigate to start URL after cookies are set
+    console.log('=== Cookie Import Complete ===');
+    console.log('Success:', successCount, 'Failed:', failCount);
+    if (errors.length > 0) {
+      console.error('Errors:', errors);
+    }
+    
+    // Wait a moment for cookies to propagate
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Verify cookies were set by reading them back
+    console.log('=== Verifying Cookies ===');
+    verifiedCount = 0;
+    for (const cookie of cookies) {
+      try {
+        const urlDomain = cookie.domain.startsWith('.') ? cookie.domain.substring(1) : cookie.domain;
+        const cookieProtocol = cookie.secure ? 'https://' : 'http://';
+        const cookieUrl = cookieProtocol + urlDomain + (cookie.path || '/');
+        
+        const readCookies = await chrome.cookies.getAll({
+          url: cookieUrl,
+          name: cookie.name,
+          storeId: incognitoStore.id
+        });
+        
+        if (readCookies && readCookies.length > 0) {
+          console.log('✓ Verified cookie:', cookie.name, readCookies[0]);
+          verifiedCount++;
+        } else {
+          console.warn('✗ Cookie not found after setting:', cookie.name);
+        }
+      } catch (error) {
+        console.error('Error verifying cookie:', cookie.name, error);
+      }
+    }
+    console.log('Verified:', verifiedCount, '/', cookies.length, 'cookies');
+    
+    // Navigate to start URL after cookies are set and verified
     await chrome.tabs.update(incognitoTab.id, { url: startUrl });
     
     // Show results
@@ -750,12 +828,15 @@ async function launchIncognitoSession() {
       '<div class="info-box">' +
       '<strong>✅ Incognito Session Launched</strong><br><br>' +
       'Cookies imported: ' + successCount + ' / ' + cookies.length + '<br>' +
+      'Cookies verified: ' + verifiedCount + ' / ' + successCount + '<br>' +
       'URL: <code>' + escapeHtml(startUrl) + '</code><br><br>' +
       '<strong>What now?</strong><br>' +
       '1. The incognito window has opened<br>' +
       '2. Cookies are set - you should be logged in<br>' +
       '3. Navigate to reproduce the issue<br>' +
       '4. Close the incognito window when done<br><br>' +
+      '<strong>Debug Info:</strong><br>' +
+      'Check browser console (F12) for detailed cookie logs.<br><br>' +
       '⚠️ <strong>Remember:</strong> You are acting as the user - any actions you take will be as them!' +
       '</div>';
     
@@ -844,4 +925,88 @@ function displayCookieList() {
   }
   
   responsePanel.innerHTML = html;
+}
+
+// Export cookies to JSON file
+function exportCookies() {
+  if (cookies.length === 0) {
+    alert('No cookies to export. Load a HAR file first.');
+    return;
+  }
+  
+  const exportData = {
+    version: '1.0',
+    exported: new Date().toISOString(),
+    totalCookies: cookies.length,
+    cookies: cookies
+  };
+  
+  const json = JSON.stringify(exportData, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+  const filename = 'session-cookies-' + timestamp + '.json';
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
+  responsePanel.innerHTML = 
+    '<div class="info-box">' +
+    '<strong>✅ Cookies Exported</strong><br><br>' +
+    'File: <code>' + filename + '</code><br>' +
+    'Cookies: ' + cookies.length + '<br><br>' +
+    'You can now:<br>' +
+    '1. Review the JSON structure<br>' +
+    '2. Test cookie import functionality<br>' +
+    '3. Share cookies securely (if authorized)' +
+    '</div>';
+}
+
+// Import cookies from JSON file
+function importCookies(file) {
+  const reader = new FileReader();
+  
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      
+      // Validate format
+      if (!data.cookies || !Array.isArray(data.cookies)) {
+        alert('Invalid cookie file format. Expected "cookies" array.');
+        return;
+      }
+      
+      // Load cookies
+      cookies = data.cookies;
+      
+      // Clear sessions since we're not loading from HAR
+      sessions = [];
+      harData = null;
+      
+      // Update UI
+      displaySessions();
+      updateIncognitoButton();
+      
+      responsePanel.innerHTML = 
+        '<div class="info-box">' +
+        '<strong>✅ Cookies Imported</strong><br><br>' +
+        'Loaded: ' + cookies.length + ' cookie(s)<br>' +
+        'Source: ' + escapeHtml(file.name) + '<br>' +
+        (data.exported ? 'Exported: ' + data.exported + '<br>' : '') +
+        '<br>' +
+        'Click "View Cookies" to review or "Launch Incognito" to test.' +
+        '</div>';
+      
+    } catch (error) {
+      alert('Error parsing cookie file: ' + error.message);
+    }
+  };
+  
+  reader.readAsText(file);
 }
