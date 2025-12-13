@@ -14,10 +14,14 @@ const viewCookiesBtn = document.getElementById('viewCookiesBtn');
 const exportCookiesBtn = document.getElementById('exportCookiesBtn');
 const importCookiesBtn = document.getElementById('importCookiesBtn');
 const cookiesFileInput = document.getElementById('cookiesFileInput');
+const cookieSelectionList = document.getElementById('cookieSelectionList');
+const selectAllCookiesBtn = document.getElementById('selectAllCookiesBtn');
+const deselectAllCookiesBtn = document.getElementById('deselectAllCookiesBtn');
 
 let harData = null;
 let sessions = [];
 let cookies = [];
+let cookieSelection = new Set(); // Track selected cookie indices
 let selectedSession = null;
 let selectedMethod = 'GET';
 
@@ -65,6 +69,22 @@ incognitoCheckbox.addEventListener('change', () => {
   regularModeWarning.style.display = incognitoCheckbox.checked ? 'none' : 'block';
 });
 
+// Select/Deselect all cookies
+selectAllCookiesBtn.addEventListener('click', () => {
+  cookieSelection.clear();
+  for (let i = 0; i < cookies.length; i++) {
+    cookieSelection.add(i);
+  }
+  displayCookieSelection();
+  updateIncognitoButton();
+});
+
+deselectAllCookiesBtn.addEventListener('click', () => {
+  cookieSelection.clear();
+  displayCookieSelection();
+  updateIncognitoButton();
+});
+
 // Method selector
 document.querySelectorAll('.method-btn').forEach(btn => {
   btn.addEventListener('click', (e) => {
@@ -94,7 +114,15 @@ function loadHARFile(file) {
       
       extractSessions();
       extractCookies();
+      
+      // Select all cookies by default
+      cookieSelection.clear();
+      for (let i = 0; i < cookies.length; i++) {
+        cookieSelection.add(i);
+      }
+      
       displaySessions();
+      displayCookieSelection();
       updateIncognitoButton();
       
     } catch (error) {
@@ -184,14 +212,110 @@ function extractCookies() {
 function updateIncognitoButton() {
   const isIncognito = incognitoCheckbox.checked;
   const mode = isIncognito ? 'Incognito' : 'Regular';
+  const selectedCount = cookieSelection.size;
   
-  if (cookies.length > 0) {
+  if (selectedCount > 0) {
     launchIncognitoBtn.disabled = false;
-    launchIncognitoBtn.textContent = '🕵️ Launch ' + mode + ' with ' + cookies.length + ' Cookie' + (cookies.length !== 1 ? 's' : '');
+    launchIncognitoBtn.textContent = '🕵️ Launch ' + mode + ' with ' + selectedCount + ' Cookie' + (selectedCount !== 1 ? 's' : '');
   } else {
     launchIncognitoBtn.disabled = true;
-    launchIncognitoBtn.textContent = '🕵️ No cookies found';
+    launchIncognitoBtn.textContent = '🕵️ No cookies selected';
   }
+}
+
+// Display cookie selection list with checkboxes
+function displayCookieSelection() {
+  if (cookies.length === 0) {
+    cookieSelectionList.innerHTML = 
+      '<div style="padding: 12px; color: #5f6368; text-align: center; font-size: 11px;">No cookies loaded</div>';
+    return;
+  }
+  
+  // Group cookies by domain
+  const byDomain = {};
+  cookies.forEach((cookie, index) => {
+    if (!byDomain[cookie.domain]) {
+      byDomain[cookie.domain] = [];
+    }
+    byDomain[cookie.domain].push({cookie, index});
+  });
+  
+  let html = '';
+  
+  for (const [domain, domainCookies] of Object.entries(byDomain)) {
+    const allSelected = domainCookies.every(item => cookieSelection.has(item.index));
+    const someSelected = domainCookies.some(item => cookieSelection.has(item.index));
+    
+    // Domain header with checkbox
+    html += '<div style="margin-bottom: 8px; border-bottom: 1px solid #e8eaed; padding-bottom: 4px;">';
+    html += '<label style="display: flex; align-items: center; cursor: pointer; font-weight: 500; font-size: 11px; color: #202124;">';
+    html += '<input type="checkbox" class="domain-checkbox" data-domain="' + escapeHtml(domain) + '" ' + 
+            (allSelected ? 'checked' : '') + 
+            ' style="margin-right: 6px;">';
+    html += '<span>' + escapeHtml(domain) + ' (' + domainCookies.length + ')</span>';
+    html += '</label>';
+    html += '</div>';
+    
+    // Individual cookies
+    html += '<div style="margin-left: 20px; margin-bottom: 12px;">';
+    domainCookies.forEach(({cookie, index}) => {
+      const isSelected = cookieSelection.has(index);
+      const truncatedValue = cookie.value.length > 40 
+        ? cookie.value.substring(0, 40) + '...' 
+        : cookie.value;
+      
+      html += '<label style="display: flex; align-items: start; cursor: pointer; padding: 4px 0; font-size: 10px; color: #5f6368;">';
+      html += '<input type="checkbox" class="cookie-checkbox" data-index="' + index + '" ' + 
+              (isSelected ? 'checked' : '') + 
+              ' style="margin-right: 6px; margin-top: 2px; flex-shrink: 0;">';
+      html += '<div style="flex: 1; overflow: hidden;">';
+      html += '<div style="font-weight: 500; color: #202124;">' + escapeHtml(cookie.name) + '</div>';
+      html += '<div style="font-family: monospace; word-break: break-all; color: #5f6368;">' + escapeHtml(truncatedValue) + '</div>';
+      html += '</div>';
+      html += '</label>';
+    });
+    html += '</div>';
+  }
+  
+  cookieSelectionList.innerHTML = html;
+  
+  // Add event listeners for domain checkboxes
+  cookieSelectionList.querySelectorAll('.domain-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', (e) => {
+      const domain = e.target.dataset.domain;
+      const checked = e.target.checked;
+      
+      // Find all cookies for this domain and update selection
+      cookies.forEach((cookie, index) => {
+        if (cookie.domain === domain) {
+          if (checked) {
+            cookieSelection.add(index);
+          } else {
+            cookieSelection.delete(index);
+          }
+        }
+      });
+      
+      displayCookieSelection();
+      updateIncognitoButton();
+    });
+  });
+  
+  // Add event listeners for individual cookie checkboxes
+  cookieSelectionList.querySelectorAll('.cookie-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', (e) => {
+      const index = parseInt(e.target.dataset.index);
+      
+      if (e.target.checked) {
+        cookieSelection.add(index);
+      } else {
+        cookieSelection.delete(index);
+      }
+      
+      displayCookieSelection();
+      updateIncognitoButton();
+    });
+  });
 }
 
 // Extract sessions and tokens from HAR
@@ -643,17 +767,20 @@ function escapeHtml(text) {
 
 // Launch incognito session with cookies
 async function launchIncognitoSession() {
-  if (cookies.length === 0) {
-    alert('No cookies to import. Load a HAR file or import cookies first.');
+  if (cookieSelection.size === 0) {
+    alert('No cookies selected. Please select cookies to import.');
     return;
   }
+  
+  // Get only selected cookies
+  const selectedCookies = cookies.filter((cookie, index) => cookieSelection.has(index));
   
   const useIncognito = incognitoCheckbox.checked;
   const mode = useIncognito ? 'incognito' : 'regular';
   
   // Show confirmation with cookie details
   const domainCount = {};
-  cookies.forEach(cookie => {
+  selectedCookies.forEach(cookie => {
     const domain = cookie.domain;
     domainCount[domain] = (domainCount[domain] || 0) + 1;
   });
@@ -664,7 +791,7 @@ async function launchIncognitoSession() {
   
   const modeText = useIncognito ? 'incognito/private' : 'regular';
   const confirmed = confirm(
-    'Launch ' + modeText + ' window with ' + cookies.length + ' cookie(s)?\n\n' +
+    'Launch ' + modeText + ' window with ' + selectedCookies.length + ' selected cookie(s)?\n\n' +
     'Domains:\n' + domainList + '\n\n' +
     'You will browse as the user from the HAR file.\n' +
     (useIncognito ? 'Incognito mode: Session isolated from normal browsing.\n' : 'Regular mode: Cookies will be in your main browser profile.\n') +
@@ -739,9 +866,10 @@ async function launchIncognitoSession() {
     console.log('Window ID:', newWindow.id);
     console.log('Tab ID:', newTab.id);
     console.log('Cookie store ID:', targetStore.id);
-    console.log('Total cookies to import:', cookies.length);
+    console.log('Total cookies selected:', selectedCookies.length);
+    console.log('Total cookies available:', cookies.length);
     
-    for (const cookie of cookies) {
+    for (const cookie of selectedCookies) {
       try {
         // Clean up domain - Chrome cookies API is picky
         let cookieDomain = cookie.domain;
@@ -823,7 +951,7 @@ async function launchIncognitoSession() {
     // Verify cookies were set by reading them back
     console.log('=== Verifying Cookies ===');
     verifiedCount = 0;
-    for (const cookie of cookies) {
+    for (const cookie of selectedCookies) {
       try {
         const urlDomain = cookie.domain.startsWith('.') ? cookie.domain.substring(1) : cookie.domain;
         const cookieProtocol = cookie.secure ? 'https://' : 'http://';
@@ -845,7 +973,7 @@ async function launchIncognitoSession() {
         console.error('Error verifying cookie:', cookie.name, error);
       }
     }
-    console.log('Verified:', verifiedCount, '/', cookies.length, 'cookies');
+    console.log('Verified:', verifiedCount, '/', selectedCookies.length, 'cookies');
     
     // Navigate to start URL after cookies are set and verified
     await chrome.tabs.update(newTab.id, { url: startUrl });
@@ -856,12 +984,13 @@ async function launchIncognitoSession() {
       '<div class="info-box">' +
       '<strong>✅ ' + windowType + ' Session Launched</strong><br><br>' +
       'Window mode: ' + windowType + '<br>' +
-      'Cookies imported: ' + successCount + ' / ' + cookies.length + '<br>' +
+      'Cookies selected: ' + selectedCookies.length + ' / ' + cookies.length + '<br>' +
+      'Cookies imported: ' + successCount + ' / ' + selectedCookies.length + '<br>' +
       'Cookies verified: ' + verifiedCount + ' / ' + successCount + '<br>' +
       'URL: <code>' + escapeHtml(startUrl) + '</code><br><br>' +
       '<strong>What now?</strong><br>' +
       '1. The ' + windowType.toLowerCase() + ' window has opened<br>' +
-      '2. Cookies are set - you should be logged in<br>' +
+      '2. Selected cookies are set - you should be logged in<br>' +
       '3. Navigate to reproduce the issue<br>' +
       '4. Close the window when done<br><br>' +
       '<strong>Debug Info:</strong><br>' +
@@ -907,29 +1036,36 @@ function displayCookieList() {
     return;
   }
   
+  const selectedCookies = cookies.filter((cookie, index) => cookieSelection.has(index));
+  
   // Group cookies by domain
   const byDomain = {};
-  cookies.forEach(cookie => {
+  cookies.forEach((cookie, index) => {
     if (!byDomain[cookie.domain]) {
       byDomain[cookie.domain] = [];
     }
-    byDomain[cookie.domain].push(cookie);
+    byDomain[cookie.domain].push({cookie, index});
   });
   
   let html = '<div class="info-box">' +
-    '<strong>Cookies to Import (' + cookies.length + ' total)</strong><br>' +
-    'These will be set in the incognito session' +
+    '<strong>Cookie List</strong><br>' +
+    'Total cookies: ' + cookies.length + '<br>' +
+    'Selected: ' + selectedCookies.length + '<br><br>' +
+    'Use the Cookie Selection panel on the left to choose which cookies to import.' +
     '</div>';
   
   for (const [domain, domainCookies] of Object.entries(byDomain)) {
+    const selectedInDomain = domainCookies.filter(item => cookieSelection.has(item.index)).length;
+    
     html += '<div style="margin-top: 16px; margin-bottom: 8px;">' +
             '<strong style="color: #1a73e8;">' + escapeHtml(domain) + '</strong> ' +
-            '<span style="color: #5f6368; font-size: 11px;">(' + domainCookies.length + ' cookie' + (domainCookies.length !== 1 ? 's' : '') + ')</span>' +
+            '<span style="color: #5f6368; font-size: 11px;">(' + selectedInDomain + ' / ' + domainCookies.length + ' selected)</span>' +
             '</div>';
     
     html += '<div class="headers-list">';
     
-    domainCookies.forEach(cookie => {
+    domainCookies.forEach(({cookie, index}) => {
+      const isSelected = cookieSelection.has(index);
       const flags = [];
       if (cookie.secure) flags.push('Secure');
       if (cookie.httpOnly) flags.push('HttpOnly');
@@ -939,8 +1075,12 @@ function displayCookieList() {
         ? cookie.value.substring(0, 60) + '...' 
         : cookie.value;
       
+      const selectionBadge = isSelected 
+        ? '<span style="background: #e8f0fe; color: #1a73e8; padding: 2px 6px; border-radius: 3px; font-size: 9px; margin-left: 6px;">SELECTED</span>'
+        : '<span style="background: #f1f3f4; color: #5f6368; padding: 2px 6px; border-radius: 3px; font-size: 9px; margin-left: 6px;">NOT SELECTED</span>';
+      
       html += '<div class="header-row">' +
-              '<div class="header-name">' + escapeHtml(cookie.name) + '</div>' +
+              '<div class="header-name">' + escapeHtml(cookie.name) + selectionBadge + '</div>' +
               '<div class="header-value">' + 
               escapeHtml(truncatedValue) +
               (flags.length > 0 ? '<br><span style="color: #5f6368; font-size: 10px;">' + flags.join(', ') + '</span>' : '') +
@@ -956,16 +1096,20 @@ function displayCookieList() {
 
 // Export cookies to JSON file
 function exportCookies() {
-  if (cookies.length === 0) {
-    alert('No cookies to export. Load a HAR file first.');
+  if (cookieSelection.size === 0) {
+    alert('No cookies selected. Please select cookies to export.');
     return;
   }
+  
+  // Get only selected cookies
+  const selectedCookies = cookies.filter((cookie, index) => cookieSelection.has(index));
   
   const exportData = {
     version: '1.0',
     exported: new Date().toISOString(),
-    totalCookies: cookies.length,
-    cookies: cookies
+    totalCookies: selectedCookies.length,
+    totalAvailable: cookies.length,
+    cookies: selectedCookies
   };
   
   const json = JSON.stringify(exportData, null, 2);
@@ -985,9 +1129,10 @@ function exportCookies() {
   
   responsePanel.innerHTML = 
     '<div class="info-box">' +
-    '<strong>✅ Cookies Exported</strong><br><br>' +
+    '<strong>✅ Selected Cookies Exported</strong><br><br>' +
     'File: <code>' + filename + '</code><br>' +
-    'Cookies: ' + cookies.length + '<br><br>' +
+    'Cookies exported: ' + selectedCookies.length + ' (selected)<br>' +
+    'Total available: ' + cookies.length + '<br><br>' +
     'You can now:<br>' +
     '1. Review the JSON structure<br>' +
     '2. Test cookie import functionality<br>' +
@@ -1012,22 +1157,30 @@ function importCookies(file) {
       // Load cookies
       cookies = data.cookies;
       
+      // Select all imported cookies by default
+      cookieSelection.clear();
+      for (let i = 0; i < cookies.length; i++) {
+        cookieSelection.add(i);
+      }
+      
       // Clear sessions since we're not loading from HAR
       sessions = [];
       harData = null;
       
       // Update UI
       displaySessions();
+      displayCookieSelection();
       updateIncognitoButton();
       
       responsePanel.innerHTML = 
         '<div class="info-box">' +
         '<strong>✅ Cookies Imported</strong><br><br>' +
         'Loaded: ' + cookies.length + ' cookie(s)<br>' +
+        'Selected: ' + cookieSelection.size + ' (all by default)<br>' +
         'Source: ' + escapeHtml(file.name) + '<br>' +
         (data.exported ? 'Exported: ' + data.exported + '<br>' : '') +
         '<br>' +
-        'Click "View Cookies" to review or "Launch Incognito" to test.' +
+        'Use the Cookie Selection panel to choose which cookies to import.' +
         '</div>';
       
     } catch (error) {
