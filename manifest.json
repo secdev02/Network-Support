@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Network Support Extension",
+  "version": "1.0.0",
+  "description": "Complete network traffic capture for technical support - HAR files, live logging, and deep analysis",
+  "permissions": [
+    "storage",
+    "debugger",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

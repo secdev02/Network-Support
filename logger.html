@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Network Log - Network Support Extension</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Roboto Mono', 'Consolas', monospace;
+      font-size: 12px;
+      background: #ffffff;
+      color: #202124;
+      overflow: hidden;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      background: #f1f3f4;
+      border-bottom: 1px solid #dadce0;
+    }
+
+    .toolbar-title {
+      font-family: 'Roboto', Arial, sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      color: #202124;
+    }
+
+    .search-box {
+      flex: 1;
+      max-width: 400px;
+      position: relative;
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 6px 32px 6px 12px;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: 'Roboto', Arial, sans-serif;
+      outline: none;
+    }
+
+    .search-box input:focus {
+      border-color: #1a73e8;
+    }
+
+    .search-box .clear-search {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: #5f6368;
+      cursor: pointer;
+      padding: 0;
+      font-size: 16px;
+      display: none;
+    }
+
+    .search-box .clear-search.visible {
+      display: block;
+    }
+
+    .search-box .clear-search:hover {
+      color: #202124;
+    }
+
+    .toolbar-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: auto;
+      font-size: 12px;
+      color: #5f6368;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #5f6368;
+    }
+
+    .status-dot.recording {
+      background: #d93025;
+    }
+
+    .toolbar button {
+      padding: 4px 12px;
+      border: 1px solid #dadce0;
+      border-radius: 3px;
+      background: #fff;
+      font-size: 12px;
+      color: #3c4043;
+      cursor: pointer;
+    }
+
+    .toolbar button:hover {
+      background: #f8f9fa;
+    }
+
+    .request-list {
+      height: calc(100vh - 80px);
+      overflow-y: auto;
+      background: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    thead {
+      position: sticky;
+      top: 0;
+      background: #f1f3f4;
+      z-index: 10;
+    }
+
+    th {
+      padding: 6px 8px;
+      text-align: left;
+      font-weight: 500;
+      color: #5f6368;
+      border-bottom: 1px solid #dadce0;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 4px 8px;
+      border-bottom: 1px solid #e8eaed;
+      vertical-align: middle;
+    }
+
+    tr:hover {
+      background: #f8f9fa;
+    }
+
+    tr.filtered {
+      display: none;
+    }
+
+    tr.highlight {
+      background: #fef7e0;
+    }
+
+    .search-match {
+      background: #fbbc04;
+      color: #202124;
+      padding: 0 2px;
+      border-radius: 2px;
+    }
+
+    .method {
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 2px;
+      font-size: 10px;
+    }
+
+    .method.GET { color: #1e8e3e; background: #e6f4ea; }
+    .method.POST { color: #1967d2; background: #e8f0fe; }
+    .method.PUT { color: #ea8600; background: #fef7e0; }
+    .method.DELETE { color: #d93025; background: #fce8e6; }
+    .method.PATCH { color: #9334e6; background: #f3e8fd; }
+    .method.OPTIONS { color: #5f6368; background: #f1f3f4; }
+
+    .status {
+      font-weight: 500;
+    }
+
+    .status.success { color: #1e8e3e; }
+    .status.redirect { color: #ea8600; }
+    .status.error { color: #d93025; }
+    .status.pending { color: #5f6368; }
+
+    .url {
+      max-width: 500px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #1967d2;
+    }
+
+    .type {
+      color: #5f6368;
+      font-size: 10px;
+    }
+
+    .time {
+      text-align: right;
+      color: #5f6368;
+    }
+
+    .size {
+      text-align: right;
+      color: #5f6368;
+    }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: calc(100vh - 80px);
+      color: #5f6368;
+      font-family: 'Roboto', Arial, sans-serif;
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      opacity: 0.3;
+    }
+
+    .empty-state-text {
+      font-size: 14px;
+    }
+
+    .stats-bar {
+      display: flex;
+      gap: 20px;
+      padding: 8px 12px;
+      background: #f8f9fa;
+      border-top: 1px solid #dadce0;
+      font-size: 11px;
+      color: #5f6368;
+    }
+
+    .stat-item {
+      display: flex;
+      gap: 4px;
+    }
+
+    .stat-label {
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <div class="toolbar-title">Network Log</div>
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="Search requests (URL, headers, body...)">
+      <button class="clear-search" id="clearSearch">✕</button>
+    </div>
+    <button id="clearLogBtn">Clear</button>
+    <div class="toolbar-status">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Not recording</span>
+    </div>
+  </div>
+
+  <div class="request-list">
+    <div id="emptyState" class="empty-state">
+      <div class="empty-state-icon">📊</div>
+      <div class="empty-state-text">Network requests will appear here</div>
+    </div>
+    <table id="requestTable" style="display: none;">
+      <thead>
+        <tr>
+          <th style="width: 60px;">Method</th>
+          <th style="width: 60px;">Status</th>
+          <th>URL</th>
+          <th style="width: 80px;">Type</th>
+          <th style="width: 80px;">Size</th>
+          <th style="width: 80px;">Time</th>
+        </tr>
+      </thead>
+      <tbody id="requestTableBody">
+      </tbody>
+    </table>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat-item">
+      <span class="stat-label">Requests:</span>
+      <span id="totalRequests">0</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-label">Transferred:</span>
+      <span id="totalSize">0 B</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-label">Time:</span>
+      <span id="totalTime">0 ms</span>
+    </div>
+  </div>
+
+  <script src="logger.js"></script>
+</body>
+</html>
