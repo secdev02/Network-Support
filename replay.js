@@ -647,10 +647,13 @@ async function launchIncognitoSession() {
     }
   }
   
+  // Remove leading dot if present for URL
+  const cleanDomain = primaryDomain.startsWith('.') ? primaryDomain.substring(1) : primaryDomain;
+  
   // Determine protocol (prefer https)
   const hasHttps = cookies.some(c => c.secure);
   const protocol = hasHttps ? 'https://' : 'http://';
-  const startUrl = protocol + primaryDomain;
+  const startUrl = protocol + cleanDomain;
   
   try {
     launchIncognitoBtn.disabled = true;
@@ -658,15 +661,29 @@ async function launchIncognitoSession() {
     
     // Create incognito window
     const incognitoWindow = await chrome.windows.create({
-      url: startUrl,
+      url: 'about:blank',
       incognito: true,
       focused: true,
       width: 1200,
       height: 800
     });
     
-    // Wait a moment for the window to initialize
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Get the incognito tab
+    const tabs = await chrome.tabs.query({ windowId: incognitoWindow.id });
+    const incognitoTab = tabs[0];
+    
+    // Wait for window to initialize
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Get all cookie stores to find the incognito one
+    const allStores = await chrome.cookies.getAllCookieStores();
+    const incognitoStore = allStores.find(store => 
+      store.tabIds.includes(incognitoTab.id)
+    );
+    
+    if (!incognitoStore) {
+      throw new Error('Could not find incognito cookie store');
+    }
     
     // Set all cookies
     let successCount = 0;
@@ -675,27 +692,42 @@ async function launchIncognitoSession() {
     
     for (const cookie of cookies) {
       try {
-        // Build cookie URL
-        const protocol = cookie.secure ? 'https://' : 'http://';
-        const cookieUrl = protocol + cookie.domain + cookie.path;
+        // Clean up domain - Chrome cookies API is picky
+        let cookieDomain = cookie.domain;
         
+        // Remove leading dot for URL construction but keep for domain parameter
+        const urlDomain = cookieDomain.startsWith('.') ? cookieDomain.substring(1) : cookieDomain;
+        
+        // Build cookie URL - must be valid URL for the domain
+        const cookieProtocol = cookie.secure ? 'https://' : 'http://';
+        const cookieUrl = cookieProtocol + urlDomain + (cookie.path || '/');
+        
+        // Build cookie details for Chrome API
         const cookieDetails = {
           url: cookieUrl,
           name: cookie.name,
           value: cookie.value,
-          domain: cookie.domain.startsWith('.') ? cookie.domain : undefined,
-          path: cookie.path,
-          secure: cookie.secure,
-          httpOnly: cookie.httpOnly,
-          sameSite: cookie.sameSite,
-          storeId: incognitoWindow.id.toString()
+          path: cookie.path || '/',
+          secure: cookie.secure || false,
+          httpOnly: cookie.httpOnly || false,
+          sameSite: cookie.sameSite || 'no_restriction',
+          storeId: incognitoStore.id
         };
         
-        // Add expiration if present
-        if (cookie.expirationDate) {
-          cookieDetails.expirationDate = cookie.expirationDate;
+        // Only set domain if it starts with dot (domain cookie)
+        if (cookie.domain.startsWith('.')) {
+          cookieDetails.domain = cookie.domain;
         }
         
+        // Add expiration if present and not expired
+        if (cookie.expirationDate) {
+          const now = Date.now() / 1000;
+          if (cookie.expirationDate > now) {
+            cookieDetails.expirationDate = cookie.expirationDate;
+          }
+        }
+        
+        // Set the cookie
         await chrome.cookies.set(cookieDetails);
         successCount++;
         
@@ -703,10 +735,15 @@ async function launchIncognitoSession() {
         failCount++;
         errors.push({
           cookie: cookie.name,
+          domain: cookie.domain,
           error: error.message
         });
+        console.error('Failed to set cookie:', cookie.name, error);
       }
     }
+    
+    // Navigate to start URL after cookies are set
+    await chrome.tabs.update(incognitoTab.id, { url: startUrl });
     
     // Show results
     const resultHtml = 
@@ -715,9 +752,9 @@ async function launchIncognitoSession() {
       'Cookies imported: ' + successCount + ' / ' + cookies.length + '<br>' +
       'URL: <code>' + escapeHtml(startUrl) + '</code><br><br>' +
       '<strong>What now?</strong><br>' +
-      '1. Browse to the application in the incognito window<br>' +
-      '2. You will be logged in as the user from the HAR file<br>' +
-      '3. Reproduce the issue they reported<br>' +
+      '1. The incognito window has opened<br>' +
+      '2. Cookies are set - you should be logged in<br>' +
+      '3. Navigate to reproduce the issue<br>' +
       '4. Close the incognito window when done<br><br>' +
       '⚠️ <strong>Remember:</strong> You are acting as the user - any actions you take will be as them!' +
       '</div>';
@@ -726,7 +763,13 @@ async function launchIncognitoSession() {
       const errorHtml = 
         '<div class="warning-box" style="margin-top: 12px;">' +
         '<strong>⚠️ Warning:</strong> ' + failCount + ' cookie(s) failed to import<br>' +
-        'This may affect functionality. Check console for details.' +
+        'Successful: ' + successCount + '<br>' +
+        'Failed cookies may affect functionality.<br><br>' +
+        '<strong>Common reasons:</strong><br>' +
+        '• Expired cookies<br>' +
+        '• Invalid domain format<br>' +
+        '• Secure flag on HTTP domain<br><br>' +
+        'Check browser console for details.' +
         '</div>';
       responsePanel.innerHTML = resultHtml + errorHtml;
       console.error('Cookie import errors:', errors);
@@ -738,6 +781,7 @@ async function launchIncognitoSession() {
     launchIncognitoBtn.disabled = false;
     
   } catch (error) {
+    console.error('Incognito session error:', error);
     alert('Failed to launch incognito session: ' + error.message);
     launchIncognitoBtn.textContent = '🕵️ Launch Incognito with Cookies';
     launchIncognitoBtn.disabled = false;
