@@ -441,6 +441,13 @@ The session replay tool is perfect for:
 - OAuth refresh tokens
 - OpenID Connect ID tokens
 
+**Cookie Selection & Export:**
+- Select individual cookies or all cookies per domain
+- Export in our format or Cookie-Editor format
+- Fully compatible with Cookie-Editor browser extension
+- Import from Cookie-Editor exports
+- See [COOKIE_EDITOR_GUIDE.md](COOKIE_EDITOR_GUIDE.md) for details
+
 **Safety tips:**
 - Only use test/staging environments when possible
 - Get authorization before replaying production tokens

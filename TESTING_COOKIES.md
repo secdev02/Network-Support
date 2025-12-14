@@ -19,12 +19,28 @@
 
 1. Load a HAR file that contains cookies
 2. Click "View Cookies" to see extracted cookies
-3. Click "Export Cookies" to save as JSON
-4. Review the JSON file structure
-5. Reimport the JSON file to verify round-trip works
-6. Launch incognito session
+3. **Select cookies:**
+   - Click domain checkbox to select all cookies for that domain
+   - Click individual checkboxes for fine control
+   - Use "Select All" / "Deselect All" for bulk actions
+4. Click "Export ▼" to see export options:
+   - "Export as JSON (Our Format)" - Our metadata-rich format
+   - "Export for Cookie-Editor" - Compatible with Cookie-Editor extension
+5. Export in both formats to test
+6. Reimport each format to verify round-trip works
+7. Launch session with selected cookies
 
-### 3. Debug Cookie Import Issues
+### 3. Test Cookie-Editor Compatibility
+
+1. Import `test-cookies-cookie-editor.json`
+2. Should see: "Format detected: Cookie-Editor"
+3. All 3 cookies loaded and selected
+4. Select some cookies, export as "Cookie-Editor" format
+5. Reimport that export
+6. Verify all cookies preserved correctly
+7. Test in actual Cookie-Editor extension (optional)
+
+### 4. Debug Cookie Import Issues
 
 **Check the console logs:**
 
@@ -114,7 +130,56 @@ After launching incognito session:
 
 ### 7. Cookie Structure Reference
 
-**Correct JSON format:**
+**Our Format:**
+
+```json
+{
+  "version": "1.0",
+  "exported": "2025-12-13T18:30:00.000Z",
+  "totalCookies": 3,
+  "totalAvailable": 5,
+  "cookies": [
+    {
+      "name": "cookie_name",
+      "value": "cookie_value",
+      "domain": "example.com",
+      "path": "/",
+      "secure": true,
+      "httpOnly": false,
+      "sameSite": "lax",
+      "url": "https://example.com/",
+      "expirationDate": 1735689600
+    }
+  ]
+}
+```
+
+**Cookie-Editor Format (Compatible):**
+
+```json
+[
+  {
+    "domain": ".example.com",
+    "expirationDate": 1735689600,
+    "hostOnly": false,
+    "httpOnly": true,
+    "name": "session_id",
+    "path": "/",
+    "sameSite": "lax",
+    "secure": true,
+    "session": false,
+    "storeId": "0",
+    "value": "abc123"
+  }
+]
+```
+
+**Format Detection:**
+- Array = Cookie-Editor format (automatic)
+- Object with "cookies" = Our format (automatic)
+- Both formats fully supported for import/export
+
+**Correct JSON format (Our Format):**
 
 ```json
 {
@@ -180,18 +245,26 @@ Errors: [
 
 ### 9. Testing Checklist
 
-- [ ] Import test-cookies.json successfully
+- [ ] Import test-cookies.json successfully (our format)
+- [ ] Import test-cookies-cookie-editor.json successfully (Cookie-Editor format)
 - [ ] View cookies shows correct count and details
-- [ ] Export cookies creates valid JSON
-- [ ] Reimport exported cookies works
+- [ ] Select individual cookies works
+- [ ] Select domain (all cookies in domain) works
+- [ ] Select All button selects everything
+- [ ] Deselect All button deselects everything
+- [ ] Export as JSON (Our Format) creates valid JSON
+- [ ] Export for Cookie-Editor creates valid array format
+- [ ] Reimport exported cookies works (both formats)
 - [ ] Checkbox toggles between Incognito/Regular
 - [ ] Warning appears when regular mode selected
 - [ ] Launch session opens window (incognito mode)
 - [ ] Launch session opens window (regular mode)
-- [ ] Console shows all cookies set successfully
-- [ ] Console shows all cookies verified
+- [ ] Only selected cookies are imported (not all)
+- [ ] Console shows all selected cookies set successfully
+- [ ] Console shows all selected cookies verified
 - [ ] DevTools in window shows cookies present
 - [ ] Navigate to domain shows cookies sent in requests
+- [ ] Cookie-Editor exported file works in Cookie-Editor extension (optional)
 
 ### 10. Troubleshooting Commands
 

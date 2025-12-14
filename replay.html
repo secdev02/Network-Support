@@ -353,6 +353,11 @@
     input[type="checkbox"]:hover {
       opacity: 0.8;
     }
+
+    /* Export menu styling */
+    #exportMenu button:hover {
+      background: #f8f9fa;
+    }
   </style>
 </head>
 <body>
@@ -410,7 +415,16 @@
               View Cookies
             </button>
             <button id="exportCookiesBtn" style="flex: 1; padding: 6px; border: 1px solid #dadce0; background: #fff; border-radius: 4px; cursor: pointer; font-size: 11px;">
-              Export Selected
+              Export ▼
+            </button>
+          </div>
+          
+          <div id="exportMenu" style="display: none; margin-top: 4px; padding: 4px; background: #fff; border: 1px solid #dadce0; border-radius: 4px;">
+            <button id="exportOurFormatBtn" style="width: 100%; padding: 6px; border: none; background: #fff; text-align: left; cursor: pointer; font-size: 11px; border-radius: 3px;">
+              Export as JSON (Our Format)
+            </button>
+            <button id="exportCookieEditorBtn" style="width: 100%; padding: 6px; border: none; background: #fff; text-align: left; cursor: pointer; font-size: 11px; border-radius: 3px;">
+              Export for Cookie-Editor
             </button>
           </div>
           <button id="importCookiesBtn" style="width: 100%; margin-top: 8px; padding: 6px; border: 1px solid #dadce0; background: #fff; border-radius: 4px; cursor: pointer; font-size: 11px;">

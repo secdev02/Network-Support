@@ -12,6 +12,9 @@ const incognitoCheckbox = document.getElementById('incognitoCheckbox');
 const regularModeWarning = document.getElementById('regularModeWarning');
 const viewCookiesBtn = document.getElementById('viewCookiesBtn');
 const exportCookiesBtn = document.getElementById('exportCookiesBtn');
+const exportMenu = document.getElementById('exportMenu');
+const exportOurFormatBtn = document.getElementById('exportOurFormatBtn');
+const exportCookieEditorBtn = document.getElementById('exportCookieEditorBtn');
 const importCookiesBtn = document.getElementById('importCookiesBtn');
 const cookiesFileInput = document.getElementById('cookiesFileInput');
 const cookieSelectionList = document.getElementById('cookieSelectionList');
@@ -44,11 +47,24 @@ launchIncognitoBtn.addEventListener('click', async () => {
 // View cookies
 viewCookiesBtn.addEventListener('click', () => {
   displayCookieList();
+  exportMenu.style.display = 'none';
 });
 
-// Export cookies
+// Export cookies - toggle menu
 exportCookiesBtn.addEventListener('click', () => {
-  exportCookies();
+  exportMenu.style.display = exportMenu.style.display === 'none' ? 'block' : 'none';
+});
+
+// Export in our format
+exportOurFormatBtn.addEventListener('click', () => {
+  exportCookies('our');
+  exportMenu.style.display = 'none';
+});
+
+// Export in Cookie-Editor format
+exportCookieEditorBtn.addEventListener('click', () => {
+  exportCookies('cookie-editor');
+  exportMenu.style.display = 'none';
 });
 
 // Import cookies
@@ -67,6 +83,13 @@ incognitoCheckbox.addEventListener('change', () => {
   updateIncognitoButton();
   // Show warning if regular mode selected
   regularModeWarning.style.display = incognitoCheckbox.checked ? 'none' : 'block';
+});
+
+// Close export menu when clicking outside
+document.addEventListener('click', (e) => {
+  if (!exportCookiesBtn.contains(e.target) && !exportMenu.contains(e.target)) {
+    exportMenu.style.display = 'none';
+  }
 });
 
 // Select/Deselect all cookies
@@ -1095,7 +1118,7 @@ function displayCookieList() {
 }
 
 // Export cookies to JSON file
-function exportCookies() {
+function exportCookies(format = 'our') {
   if (cookieSelection.size === 0) {
     alert('No cookies selected. Please select cookies to export.');
     return;
@@ -1104,20 +1127,55 @@ function exportCookies() {
   // Get only selected cookies
   const selectedCookies = cookies.filter((cookie, index) => cookieSelection.has(index));
   
-  const exportData = {
-    version: '1.0',
-    exported: new Date().toISOString(),
-    totalCookies: selectedCookies.length,
-    totalAvailable: cookies.length,
-    cookies: selectedCookies
-  };
+  let exportData;
+  let filename;
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+  
+  if (format === 'cookie-editor') {
+    // Cookie-Editor format: array of cookies with their format
+    exportData = selectedCookies.map(cookie => {
+      const cookieEditorFormat = {
+        domain: cookie.domain,
+        hostOnly: !cookie.domain.startsWith('.'),
+        httpOnly: cookie.httpOnly || false,
+        name: cookie.name,
+        path: cookie.path || '/',
+        sameSite: convertSameSiteToCookieEditor(cookie.sameSite || 'no_restriction'),
+        secure: cookie.secure || false,
+        session: !cookie.expirationDate,
+        value: cookie.value
+      };
+      
+      // Add expiration if not a session cookie
+      if (cookie.expirationDate) {
+        cookieEditorFormat.expirationDate = cookie.expirationDate;
+      }
+      
+      // Add storeId if present
+      if (cookie.storeId) {
+        cookieEditorFormat.storeId = cookie.storeId;
+      }
+      
+      return cookieEditorFormat;
+    });
+    
+    filename = 'cookies-' + timestamp + '.json';
+  } else {
+    // Our format: object with metadata
+    exportData = {
+      version: '1.0',
+      exported: new Date().toISOString(),
+      totalCookies: selectedCookies.length,
+      totalAvailable: cookies.length,
+      cookies: selectedCookies
+    };
+    
+    filename = 'session-cookies-' + timestamp + '.json';
+  }
   
   const json = JSON.stringify(exportData, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
-  
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
-  const filename = 'session-cookies-' + timestamp + '.json';
   
   const a = document.createElement('a');
   a.href = url;
@@ -1127,17 +1185,45 @@ function exportCookies() {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   
+  const formatName = format === 'cookie-editor' ? 'Cookie-Editor' : 'Our Format';
+  
   responsePanel.innerHTML = 
     '<div class="info-box">' +
     '<strong>✅ Selected Cookies Exported</strong><br><br>' +
+    'Format: ' + formatName + '<br>' +
     'File: <code>' + filename + '</code><br>' +
     'Cookies exported: ' + selectedCookies.length + ' (selected)<br>' +
     'Total available: ' + cookies.length + '<br><br>' +
+    (format === 'cookie-editor' 
+      ? 'This file can be imported directly into Cookie-Editor extension.<br><br>'
+      : '') +
     'You can now:<br>' +
     '1. Review the JSON structure<br>' +
-    '2. Test cookie import functionality<br>' +
+    '2. Import into Cookie-Editor extension<br>' +
     '3. Share cookies securely (if authorized)' +
     '</div>';
+}
+
+// Convert sameSite values between formats
+function convertSameSiteToCookieEditor(sameSite) {
+  const map = {
+    'no_restriction': 'no_restriction',
+    'lax': 'lax',
+    'strict': 'strict',
+    'none': 'no_restriction'
+  };
+  return map[sameSite] || 'no_restriction';
+}
+
+function convertSameSiteFromCookieEditor(sameSite) {
+  // Cookie-Editor uses same values, but just in case
+  const map = {
+    'no_restriction': 'no_restriction',
+    'lax': 'lax',
+    'strict': 'strict',
+    'none': 'no_restriction'
+  };
+  return map[sameSite] || 'no_restriction';
 }
 
 // Import cookies from JSON file
@@ -1148,14 +1234,27 @@ function importCookies(file) {
     try {
       const data = JSON.parse(e.target.result);
       
-      // Validate format
-      if (!data.cookies || !Array.isArray(data.cookies)) {
-        alert('Invalid cookie file format. Expected "cookies" array.');
+      let importedCookies;
+      let formatDetected = 'unknown';
+      
+      // Detect format
+      if (Array.isArray(data)) {
+        // Cookie-Editor format: array of cookies
+        formatDetected = 'cookie-editor';
+        importedCookies = data.map(convertFromCookieEditorFormat);
+      } else if (data.cookies && Array.isArray(data.cookies)) {
+        // Our format: object with cookies array
+        formatDetected = 'our';
+        importedCookies = data.cookies;
+      } else {
+        alert('Invalid cookie file format. Expected either:\n' +
+              '1. Cookie-Editor format (array of cookies)\n' +
+              '2. Our format (object with "cookies" array)');
         return;
       }
       
       // Load cookies
-      cookies = data.cookies;
+      cookies = importedCookies;
       
       // Select all imported cookies by default
       cookieSelection.clear();
@@ -1172,9 +1271,12 @@ function importCookies(file) {
       displayCookieSelection();
       updateIncognitoButton();
       
+      const formatName = formatDetected === 'cookie-editor' ? 'Cookie-Editor' : 'Our Format';
+      
       responsePanel.innerHTML = 
         '<div class="info-box">' +
         '<strong>✅ Cookies Imported</strong><br><br>' +
+        'Format detected: ' + formatName + '<br>' +
         'Loaded: ' + cookies.length + ' cookie(s)<br>' +
         'Selected: ' + cookieSelection.size + ' (all by default)<br>' +
         'Source: ' + escapeHtml(file.name) + '<br>' +
@@ -1189,4 +1291,29 @@ function importCookies(file) {
   };
   
   reader.readAsText(file);
+}
+
+// Convert Cookie-Editor format to our internal format
+function convertFromCookieEditorFormat(cookieEditorCookie) {
+  const ourFormat = {
+    name: cookieEditorCookie.name,
+    value: cookieEditorCookie.value,
+    domain: cookieEditorCookie.domain,
+    path: cookieEditorCookie.path || '/',
+    secure: cookieEditorCookie.secure || false,
+    httpOnly: cookieEditorCookie.httpOnly || false,
+    sameSite: convertSameSiteFromCookieEditor(cookieEditorCookie.sameSite || 'no_restriction')
+  };
+  
+  // Add expiration if present
+  if (cookieEditorCookie.expirationDate) {
+    ourFormat.expirationDate = cookieEditorCookie.expirationDate;
+  }
+  
+  // Build URL for this cookie
+  const protocol = ourFormat.secure ? 'https://' : 'http://';
+  const urlDomain = ourFormat.domain.startsWith('.') ? ourFormat.domain.substring(1) : ourFormat.domain;
+  ourFormat.url = protocol + urlDomain + ourFormat.path;
+  
+  return ourFormat;
 }
