@@ -426,6 +426,9 @@
             <button id="exportCookieEditorBtn" style="width: 100%; padding: 6px; border: none; background: #fff; text-align: left; cursor: pointer; font-size: 11px; border-radius: 3px;">
               Export for Cookie-Editor
             </button>
+            <button id="exportEditThisCookieBtn" style="width: 100%; padding: 6px; border: none; background: #fff; text-align: left; cursor: pointer; font-size: 11px; border-radius: 3px;">
+              Export for EditThisCookie
+            </button>
           </div>
           <button id="importCookiesBtn" style="width: 100%; margin-top: 8px; padding: 6px; border: 1px solid #dadce0; background: #fff; border-radius: 4px; cursor: pointer; font-size: 11px;">
             Import Cookies JSON
@@ -436,6 +439,10 @@
       
       <div class="section">
         <div class="section-title">Detected Sessions & Tokens</div>
+        <div style="margin-bottom: 8px; position: relative;">
+          <input type="text" id="sessionSearchInput" placeholder="Search sessions, URLs, tokens..." style="width: 100%; padding: 6px 28px 6px 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 12px;">
+          <button id="clearSearchBtn" style="display: none; position: absolute; right: 4px; top: 50%; transform: translateY(-50%); padding: 4px 8px; border: none; background: transparent; cursor: pointer; color: #5f6368; font-size: 16px;">×</button>
+        </div>
         <div id="sessionsList"></div>
       </div>
     </div>

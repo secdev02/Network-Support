@@ -1,0 +1,44 @@
+[
+  {
+    "domain": ".example.com",
+    "expirationDate": 1735689600,
+    "hostOnly": false,
+    "httpOnly": true,
+    "name": "session_id",
+    "path": "/",
+    "sameSite": "lax",
+    "secure": true,
+    "session": false,
+    "storeId": "0",
+    "value": "abc123xyz789",
+    "id": 1
+  },
+  {
+    "domain": ".example.com",
+    "expirationDate": null,
+    "hostOnly": false,
+    "httpOnly": false,
+    "name": "auth_token",
+    "path": "/",
+    "sameSite": "unspecified",
+    "secure": true,
+    "session": true,
+    "storeId": "0",
+    "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.signature",
+    "id": 2
+  },
+  {
+    "domain": "www.example.com",
+    "expirationDate": 1767225600,
+    "hostOnly": true,
+    "httpOnly": false,
+    "name": "preferences",
+    "path": "/",
+    "sameSite": "lax",
+    "secure": false,
+    "session": false,
+    "storeId": "0",
+    "value": "theme=dark&lang=en&notifications=true",
+    "id": 3
+  }
+]

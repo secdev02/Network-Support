@@ -1,17 +1,30 @@
-# Cookie-Editor Integration Guide
+# Cookie Extension Integration Guide
 
 ## Overview
 
-The Session Replay tool is fully compatible with the popular **Cookie-Editor** browser extension. You can:
-- Export cookies in Cookie-Editor format
-- Import cookies from Cookie-Editor
-- Use both tools together seamlessly
+The Session Replay tool is fully compatible with popular cookie management browser extensions:
+- **Cookie-Editor** 
+- **EditThisCookie**
 
-## What is Cookie-Editor?
+You can:
+- Export cookies in Cookie-Editor format
+- Export cookies in EditThisCookie format
+- Import cookies from either extension
+- Use these tools together seamlessly
+
+## What are these extensions?
+
+### Cookie-Editor
 
 Cookie-Editor is a popular browser extension that lets you view, edit, add, delete, search, protect and block cookies. It's available for Chrome, Firefox, and Edge.
 
 🔗 https://cookie-editor.com/
+
+### EditThisCookie
+
+EditThisCookie is another popular cookie manager extension for Chrome, allowing you to add, delete, edit, search, protect and block cookies.
+
+🔗 Chrome Web Store: EditThisCookie
 
 ## Why This Integration Matters
 
@@ -60,10 +73,9 @@ Cookie-Editor is a popular browser extension that lets you view, edit, add, dele
 ### Cookie-Editor Format (Standard)
 
 **When to use:**
-- Sharing with customers
+- Sharing with customers who use Cookie-Editor
 - Import into Cookie-Editor extension
 - Cross-tool compatibility
-- Standard cookie interchange
 
 **Structure:**
 ```json
@@ -75,7 +87,7 @@ Cookie-Editor is a popular browser extension that lets you view, edit, add, dele
     "httpOnly": true,
     "name": "session_id",
     "path": "/",
-    "sameSite": "lax",
+    "sameSite": "no_restriction",
     "secure": true,
     "session": false,
     "storeId": "0",
@@ -88,6 +100,41 @@ Cookie-Editor is a popular browser extension that lets you view, edit, add, dele
 - Direct array of cookies
 - Standard cookie fields
 - Cookie-Editor specific fields (hostOnly, session, storeId)
+- Uses `"no_restriction"` for sameSite
+
+### EditThisCookie Format (Standard)
+
+**When to use:**
+- Sharing with customers who use EditThisCookie
+- Import into EditThisCookie extension
+- Cross-tool compatibility
+
+**Structure:**
+```json
+[
+  {
+    "domain": ".example.com",
+    "expirationDate": 1735689600,
+    "hostOnly": false,
+    "httpOnly": true,
+    "name": "session_id",
+    "path": "/",
+    "sameSite": "unspecified",
+    "secure": true,
+    "session": false,
+    "storeId": "0",
+    "value": "abc123",
+    "id": 1
+  }
+]
+```
+
+**Contains:**
+- Direct array of cookies
+- Standard cookie fields
+- EditThisCookie specific fields (hostOnly, session, storeId, id)
+- Uses `"unspecified"` for sameSite (key difference!)
+- Has `id` field for each cookie
 
 ## How to Export
 
@@ -99,12 +146,21 @@ Cookie-Editor is a popular browser extension that lets you view, edit, add, dele
 4. Choose format:
    - **"Export as JSON (Our Format)"** → metadata-rich format
    - **"Export for Cookie-Editor"** → Cookie-Editor compatible
+   - **"Export for EditThisCookie"** → EditThisCookie compatible
 
 ### From Cookie-Editor Extension
 
 1. Open Cookie-Editor in your browser
 2. Click "Export" button
 3. Choose "Export as JSON"
+4. Save file
+5. Import into Session Replay
+
+### From EditThisCookie Extension
+
+1. Open EditThisCookie in your browser
+2. Click "Export" button (cookie icon)
+3. Cookies exported as JSON
 4. Save file
 5. Import into Session Replay
 
@@ -115,11 +171,12 @@ Cookie-Editor is a popular browser extension that lets you view, edit, add, dele
 **The tool auto-detects the format!**
 
 1. Click "Import Cookies JSON"
-2. Select file (either format)
+2. Select file (any of the three formats)
 3. Tool detects:
-   - Array → Cookie-Editor format
+   - Array with `sameSite: "unspecified"` or `id` field → EditThisCookie format
+   - Array without those → Cookie-Editor format
    - Object with "cookies" → Our format
-4. Shows: "Format detected: Cookie-Editor" or "Format detected: Our Format"
+4. Shows: "Format detected: EditThisCookie", "Cookie-Editor", or "Our Format"
 5. All cookies loaded and selected by default
 
 ### Into Cookie-Editor Extension
@@ -130,7 +187,16 @@ Cookie-Editor is a popular browser extension that lets you view, edit, add, dele
 4. Choose "Import as JSON"
 5. Cookies appear in extension
 
-**Note:** Only works with Cookie-Editor format exports
+**Note:** Works with Cookie-Editor format exports
+
+### Into EditThisCookie Extension
+
+1. Open EditThisCookie in your browser
+2. Click import button (folder icon)
+3. Select JSON file
+4. Cookies imported automatically
+
+**Note:** Works with EditThisCookie format exports
 
 ## Field Mapping
 
@@ -149,6 +215,40 @@ Cookie-Editor is a popular browser extension that lets you view, edit, add, dele
 | - | hostOnly | Calculated from domain |
 | - | session | Calculated from expiration |
 | - | storeId | Default "0" |
+
+### EditThisCookie Format → Our Format
+
+| EditThisCookie Field | Our Field | Notes |
+|---------------------|-----------|-------|
+| name | name | Direct |
+| value | value | Direct |
+| domain | domain | Direct |
+| path | path | Direct |
+| secure | secure | Direct |
+| httpOnly | httpOnly | Direct |
+| sameSite | sameSite | Converted: "unspecified" → "no_restriction" |
+| expirationDate | expirationDate | If present |
+| hostOnly | - | Preserved in domain format |
+| session | - | Determines if expirationDate set |
+| storeId | - | Not used in our tool |
+| id | - | Not preserved |
+
+### Our Format → EditThisCookie Format
+
+| Our Field | EditThisCookie Field | Notes |
+|-----------|---------------------|-------|
+| name | name | Direct |
+| value | value | Direct |
+| domain | domain | Direct |
+| path | path | Default "/" |
+| secure | secure | Default false |
+| httpOnly | httpOnly | Default false |
+| sameSite | sameSite | Converted: "no_restriction" → "unspecified" |
+| expirationDate | expirationDate | Unix timestamp |
+| - | hostOnly | Calculated from domain |
+| - | session | Calculated from expiration |
+| - | storeId | Default "0" |
+| - | id | Auto-generated (1, 2, 3...) |
 
 ### Cookie-Editor Format → Our Format
 
@@ -366,19 +466,35 @@ Our tool preserves domain format exactly as exported.
 - Warn customers about sensitivity
 - Set expiration reminders
 
-## Cookie-Editor Extension Links
+## Cookie Extension Links
 
+### Cookie-Editor
 - **Chrome:** https://chrome.google.com/webstore/detail/cookie-editor/
 - **Firefox:** https://addons.mozilla.org/firefox/addon/cookie-editor/
 - **Edge:** https://microsoftedge.microsoft.com/addons/detail/cookie-editor/
 
+### EditThisCookie
+- **Chrome:** https://chrome.google.com/webstore/detail/editthiscookie/
+
+## Key Differences Between Extensions
+
+| Feature | Cookie-Editor | EditThisCookie |
+|---------|--------------|----------------|
+| sameSite default | "no_restriction" | "unspecified" |
+| Has id field | No | Yes |
+| Multi-browser | Chrome, Firefox, Edge | Chrome only |
+| Export format | JSON array | JSON array |
+| Our support | ✅ Full | ✅ Full |
+
+Both formats are fully supported with auto-detection!
+
 ## Summary
 
-✅ **Fully compatible** with Cookie-Editor extension
+✅ **Fully compatible** with Cookie-Editor and EditThisCookie extensions
 ✅ **Auto-detection** - no manual format selection needed
-✅ **Two export formats** - choose based on use case
+✅ **Three export formats** - choose based on use case
 ✅ **Round-trip tested** - export and reimport preserves everything
 ✅ **Selection applies** - only selected cookies exported
-✅ **Standard compliance** - follows Cookie-Editor JSON schema
+✅ **Standard compliance** - follows both Cookie-Editor and EditThisCookie JSON schemas
 
-This makes Session Replay a powerful complement to Cookie-Editor for debugging user sessions!
+This makes Session Replay a powerful complement to popular cookie extensions for debugging user sessions!

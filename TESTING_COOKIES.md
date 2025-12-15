@@ -30,15 +30,18 @@
 6. Reimport each format to verify round-trip works
 7. Launch session with selected cookies
 
-### 3. Test Cookie-Editor Compatibility
+### 3. Test Cookie-Editor & EditThisCookie Compatibility
 
 1. Import `test-cookies-cookie-editor.json`
 2. Should see: "Format detected: Cookie-Editor"
 3. All 3 cookies loaded and selected
-4. Select some cookies, export as "Cookie-Editor" format
-5. Reimport that export
-6. Verify all cookies preserved correctly
-7. Test in actual Cookie-Editor extension (optional)
+4. Import `test-cookies-editthiscookie.json`
+5. Should see: "Format detected: EditThisCookie"
+6. All 3 cookies loaded and selected
+7. Select some cookies, export in each format
+8. Reimport each export
+9. Verify all cookies preserved correctly
+10. Test in actual Cookie-Editor/EditThisCookie extensions (optional)
 
 ### 4. Debug Cookie Import Issues
 
@@ -165,7 +168,7 @@ After launching incognito session:
     "httpOnly": true,
     "name": "session_id",
     "path": "/",
-    "sameSite": "lax",
+    "sameSite": "no_restriction",
     "secure": true,
     "session": false,
     "storeId": "0",
@@ -174,10 +177,32 @@ After launching incognito session:
 ]
 ```
 
+**EditThisCookie Format (Compatible):**
+
+```json
+[
+  {
+    "domain": ".example.com",
+    "expirationDate": 1735689600,
+    "hostOnly": false,
+    "httpOnly": true,
+    "name": "session_id",
+    "path": "/",
+    "sameSite": "unspecified",
+    "secure": true,
+    "session": false,
+    "storeId": "0",
+    "value": "abc123",
+    "id": 1
+  }
+]
+```
+
 **Format Detection:**
-- Array = Cookie-Editor format (automatic)
+- Array with `sameSite: "unspecified"` or `id` field = EditThisCookie (automatic)
+- Array without those = Cookie-Editor format (automatic)
 - Object with "cookies" = Our format (automatic)
-- Both formats fully supported for import/export
+- All three formats fully supported for import/export
 
 **Correct JSON format (Our Format):**
 
@@ -247,6 +272,7 @@ Errors: [
 
 - [ ] Import test-cookies.json successfully (our format)
 - [ ] Import test-cookies-cookie-editor.json successfully (Cookie-Editor format)
+- [ ] Import test-cookies-editthiscookie.json successfully (EditThisCookie format)
 - [ ] View cookies shows correct count and details
 - [ ] Select individual cookies works
 - [ ] Select domain (all cookies in domain) works
@@ -254,7 +280,9 @@ Errors: [
 - [ ] Deselect All button deselects everything
 - [ ] Export as JSON (Our Format) creates valid JSON
 - [ ] Export for Cookie-Editor creates valid array format
-- [ ] Reimport exported cookies works (both formats)
+- [ ] Export for EditThisCookie creates valid array format with id field
+- [ ] Reimport exported cookies works (all three formats)
+- [ ] Format auto-detection works correctly
 - [ ] Checkbox toggles between Incognito/Regular
 - [ ] Warning appears when regular mode selected
 - [ ] Launch session opens window (incognito mode)
@@ -265,6 +293,7 @@ Errors: [
 - [ ] DevTools in window shows cookies present
 - [ ] Navigate to domain shows cookies sent in requests
 - [ ] Cookie-Editor exported file works in Cookie-Editor extension (optional)
+- [ ] EditThisCookie exported file works in EditThisCookie extension (optional)
 
 ### 10. Troubleshooting Commands
 

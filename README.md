@@ -443,9 +443,10 @@ The session replay tool is perfect for:
 
 **Cookie Selection & Export:**
 - Select individual cookies or all cookies per domain
-- Export in our format or Cookie-Editor format
-- Fully compatible with Cookie-Editor browser extension
-- Import from Cookie-Editor exports
+- Export in 3 formats: Our Format, Cookie-Editor, EditThisCookie
+- Fully compatible with Cookie-Editor and EditThisCookie extensions
+- Import from Cookie-Editor or EditThisCookie exports
+- Auto-detects format on import
 - See [COOKIE_EDITOR_GUIDE.md](COOKIE_EDITOR_GUIDE.md) for details
 
 **Safety tips:**

@@ -3,6 +3,8 @@
 const loadHarBtn = document.getElementById('loadHarBtn');
 const harFileInput = document.getElementById('harFileInput');
 const sessionsList = document.getElementById('sessionsList');
+const sessionSearchInput = document.getElementById('sessionSearchInput');
+const clearSearchBtn = document.getElementById('clearSearchBtn');
 const urlInput = document.getElementById('urlInput');
 const bodyInput = document.getElementById('bodyInput');
 const sendBtn = document.getElementById('sendBtn');
@@ -15,6 +17,7 @@ const exportCookiesBtn = document.getElementById('exportCookiesBtn');
 const exportMenu = document.getElementById('exportMenu');
 const exportOurFormatBtn = document.getElementById('exportOurFormatBtn');
 const exportCookieEditorBtn = document.getElementById('exportCookieEditorBtn');
+const exportEditThisCookieBtn = document.getElementById('exportEditThisCookieBtn');
 const importCookiesBtn = document.getElementById('importCookiesBtn');
 const cookiesFileInput = document.getElementById('cookiesFileInput');
 const cookieSelectionList = document.getElementById('cookieSelectionList');
@@ -27,6 +30,7 @@ let cookies = [];
 let cookieSelection = new Set(); // Track selected cookie indices
 let selectedSession = null;
 let selectedMethod = 'GET';
+let searchFilter = ''; // Search filter for sessions
 
 // Load HAR file
 loadHarBtn.addEventListener('click', () => {
@@ -67,6 +71,12 @@ exportCookieEditorBtn.addEventListener('click', () => {
   exportMenu.style.display = 'none';
 });
 
+// Export in EditThisCookie format
+exportEditThisCookieBtn.addEventListener('click', () => {
+  exportCookies('editthiscookie');
+  exportMenu.style.display = 'none';
+});
+
 // Import cookies
 importCookiesBtn.addEventListener('click', () => {
   cookiesFileInput.click();
@@ -90,6 +100,21 @@ document.addEventListener('click', (e) => {
   if (!exportCookiesBtn.contains(e.target) && !exportMenu.contains(e.target)) {
     exportMenu.style.display = 'none';
   }
+});
+
+// Search sessions
+sessionSearchInput.addEventListener('input', (e) => {
+  searchFilter = e.target.value.toLowerCase().trim();
+  clearSearchBtn.style.display = searchFilter ? 'block' : 'none';
+  displaySessions();
+});
+
+// Clear search
+clearSearchBtn.addEventListener('click', () => {
+  sessionSearchInput.value = '';
+  searchFilter = '';
+  clearSearchBtn.style.display = 'none';
+  displaySessions();
 });
 
 // Select/Deselect all cookies
@@ -538,9 +563,63 @@ function displaySessions() {
     return;
   }
   
+  // Filter sessions based on search
+  const filteredSessions = sessions.filter((session, index) => {
+    if (!searchFilter) return true;
+    
+    // Search in type, value, source, URL, headers
+    const searchableText = [
+      session.type,
+      session.value,
+      session.source,
+      session.headerName || '',
+      session.metadata ? JSON.stringify(session.metadata) : ''
+    ].join(' ').toLowerCase();
+    
+    // Also search in original request if available
+    if (session.requestIndex !== undefined && harData) {
+      const entry = harData.log.entries[session.requestIndex];
+      if (entry) {
+        const requestText = [
+          entry.request.url,
+          entry.request.method,
+          JSON.stringify(entry.request.queryString),
+          JSON.stringify(entry.request.headers),
+          entry.request.postData ? entry.request.postData.text : ''
+        ].join(' ').toLowerCase();
+        return searchableText.includes(searchFilter) || requestText.includes(searchFilter);
+      }
+    }
+    
+    return searchableText.includes(searchFilter);
+  });
+  
+  if (filteredSessions.length === 0) {
+    sessionsList.innerHTML = 
+      '<div style="padding: 12px; color: #5f6368; text-align: center;">' +
+      'No sessions match "' + escapeHtml(searchFilter) + '"<br>' +
+      '<span style="font-size: 11px;">Found ' + sessions.length + ' total sessions</span>' +
+      '</div>';
+    return;
+  }
+  
   sessionsList.innerHTML = '';
   
-  sessions.forEach((session, index) => {
+  // Show search results count if filtering
+  if (searchFilter) {
+    const countDiv = document.createElement('div');
+    countDiv.style.padding = '8px 12px';
+    countDiv.style.fontSize = '11px';
+    countDiv.style.color = '#5f6368';
+    countDiv.style.background = '#fff';
+    countDiv.style.borderRadius = '4px';
+    countDiv.style.marginBottom = '8px';
+    countDiv.textContent = 'Showing ' + filteredSessions.length + ' of ' + sessions.length + ' sessions';
+    sessionsList.appendChild(countDiv);
+  }
+  
+  filteredSessions.forEach((session) => {
+    const index = sessions.indexOf(session); // Get original index
     const card = document.createElement('div');
     card.className = 'session-card';
     card.dataset.index = index;
@@ -563,7 +642,8 @@ function displaySessions() {
       '<div class="session-type">' + escapeHtml(session.type) + '</div>' +
       '<div class="session-value">' + escapeHtml(truncatedValue) + '</div>' +
       '<div class="session-source">' + escapeHtml(session.source) + '</div>' +
-      metadataHtml;
+      metadataHtml +
+      '<div style="margin-top: 8px; font-size: 10px; color: #1a73e8; cursor: pointer;">👁️ View Details</div>';
     
     card.addEventListener('click', () => selectSession(index));
     
@@ -596,12 +676,179 @@ function selectSession(index) {
 function showSessionInfo() {
   if (!selectedSession) return;
   
-  responsePanel.innerHTML = 
-    '<div class="info-box">' +
+  let detailHtml = '<div class="info-box">' +
     '<strong>Selected:</strong> ' + escapeHtml(selectedSession.type) + '<br>' +
-    '<strong>Value:</strong> <code>' + escapeHtml(selectedSession.value) + '</code>' +
-    '</div>' +
-    '<div style="color: #5f6368;">Configure the request above and click "Send Request" to test this session.</div>';
+    '<strong>Value:</strong> <code>' + escapeHtml(selectedSession.value) + '</code><br>';
+  
+  if (selectedSession.headerName) {
+    detailHtml += '<strong>Header:</strong> <code>' + escapeHtml(selectedSession.headerName) + '</code><br>';
+  }
+  
+  detailHtml += '</div>';
+  
+  // Show full request details if available
+  if (selectedSession.requestIndex !== undefined && harData) {
+    const entry = harData.log.entries[selectedSession.requestIndex];
+    if (entry) {
+      const request = entry.request;
+      const response = entry.response;
+      
+      detailHtml += '<div style="margin-top: 16px;">';
+      detailHtml += '<div style="font-weight: 500; margin-bottom: 8px; font-size: 14px;">📋 Request Details</div>';
+      
+      // Request summary
+      detailHtml += '<div class="info-box" style="margin-bottom: 12px;">';
+      detailHtml += '<strong>Method:</strong> ' + escapeHtml(request.method) + '<br>';
+      detailHtml += '<strong>URL:</strong> <code style="word-break: break-all;">' + escapeHtml(request.url) + '</code><br>';
+      if (request.httpVersion) {
+        detailHtml += '<strong>HTTP Version:</strong> ' + escapeHtml(request.httpVersion) + '<br>';
+      }
+      detailHtml += '</div>';
+      
+      // Query Parameters
+      if (request.queryString && request.queryString.length > 0) {
+        detailHtml += '<div style="margin-bottom: 12px;">';
+        detailHtml += '<div style="font-weight: 500; margin-bottom: 4px; font-size: 12px;">🔍 Query Parameters (' + request.queryString.length + ')</div>';
+        detailHtml += '<div class="headers-list">';
+        request.queryString.forEach(param => {
+          detailHtml += '<div class="header-row">';
+          detailHtml += '<div class="header-name">' + escapeHtml(param.name) + '</div>';
+          detailHtml += '<div class="header-value">' + escapeHtml(param.value) + '</div>';
+          detailHtml += '</div>';
+        });
+        detailHtml += '</div></div>';
+      }
+      
+      // Request Headers
+      if (request.headers && request.headers.length > 0) {
+        detailHtml += '<div style="margin-bottom: 12px;">';
+        detailHtml += '<div style="font-weight: 500; margin-bottom: 4px; font-size: 12px;">📨 Request Headers (' + request.headers.length + ')</div>';
+        detailHtml += '<div class="headers-list">';
+        request.headers.forEach(header => {
+          // Highlight auth headers
+          const isAuthHeader = header.name.toLowerCase().includes('auth') || 
+                                header.name.toLowerCase() === 'cookie' ||
+                                header.name.toLowerCase().includes('token');
+          const headerClass = isAuthHeader ? 'style="background: #fef7e0;"' : '';
+          
+          detailHtml += '<div class="header-row" ' + headerClass + '>';
+          detailHtml += '<div class="header-name">' + escapeHtml(header.name) + '</div>';
+          detailHtml += '<div class="header-value">' + escapeHtml(header.value) + '</div>';
+          detailHtml += '</div>';
+        });
+        detailHtml += '</div></div>';
+      }
+      
+      // Request Cookies
+      if (request.cookies && request.cookies.length > 0) {
+        detailHtml += '<div style="margin-bottom: 12px;">';
+        detailHtml += '<div style="font-weight: 500; margin-bottom: 4px; font-size: 12px;">🍪 Request Cookies (' + request.cookies.length + ')</div>';
+        detailHtml += '<div class="headers-list">';
+        request.cookies.forEach(cookie => {
+          detailHtml += '<div class="header-row">';
+          detailHtml += '<div class="header-name">' + escapeHtml(cookie.name) + '</div>';
+          detailHtml += '<div class="header-value">' + escapeHtml(cookie.value) + '</div>';
+          detailHtml += '</div>';
+        });
+        detailHtml += '</div></div>';
+      }
+      
+      // Request Body
+      if (request.postData && request.postData.text) {
+        detailHtml += '<div style="margin-bottom: 12px;">';
+        detailHtml += '<div style="font-weight: 500; margin-bottom: 4px; font-size: 12px;">📦 Request Body</div>';
+        
+        // Try to format as JSON
+        let bodyText = request.postData.text;
+        try {
+          const parsed = JSON.parse(bodyText);
+          bodyText = JSON.stringify(parsed, null, 2);
+        } catch (e) {
+          // Not JSON, use as-is
+        }
+        
+        detailHtml += '<div class="code-block">' + escapeHtml(bodyText) + '</div>';
+        detailHtml += '</div>';
+      }
+      
+      // Response Info
+      if (response) {
+        detailHtml += '<div style="margin-top: 16px;">';
+        detailHtml += '<div style="font-weight: 500; margin-bottom: 8px; font-size: 14px;">📬 Response Details</div>';
+        
+        detailHtml += '<div class="info-box" style="margin-bottom: 12px;">';
+        detailHtml += '<strong>Status:</strong> ' + response.status + ' ' + escapeHtml(response.statusText) + '<br>';
+        if (response.httpVersion) {
+          detailHtml += '<strong>HTTP Version:</strong> ' + escapeHtml(response.httpVersion) + '<br>';
+        }
+        if (response.redirectURL) {
+          detailHtml += '<strong>Redirect URL:</strong> <code>' + escapeHtml(response.redirectURL) + '</code><br>';
+        }
+        detailHtml += '</div>';
+        
+        // Response Headers
+        if (response.headers && response.headers.length > 0) {
+          detailHtml += '<div style="margin-bottom: 12px;">';
+          detailHtml += '<div style="font-weight: 500; margin-bottom: 4px; font-size: 12px;">📨 Response Headers (' + response.headers.length + ')</div>';
+          detailHtml += '<div class="headers-list">';
+          response.headers.forEach(header => {
+            detailHtml += '<div class="header-row">';
+            detailHtml += '<div class="header-name">' + escapeHtml(header.name) + '</div>';
+            detailHtml += '<div class="header-value">' + escapeHtml(header.value) + '</div>';
+            detailHtml += '</div>';
+          });
+          detailHtml += '</div></div>';
+        }
+        
+        // Response Cookies
+        if (response.cookies && response.cookies.length > 0) {
+          detailHtml += '<div style="margin-bottom: 12px;">';
+          detailHtml += '<div style="font-weight: 500; margin-bottom: 4px; font-size: 12px;">🍪 Response Cookies (' + response.cookies.length + ')</div>';
+          detailHtml += '<div class="headers-list">';
+          response.cookies.forEach(cookie => {
+            detailHtml += '<div class="header-row">';
+            detailHtml += '<div class="header-name">' + escapeHtml(cookie.name) + '</div>';
+            detailHtml += '<div class="header-value">' + escapeHtml(cookie.value) + '</div>';
+            detailHtml += '</div>';
+          });
+          detailHtml += '</div></div>';
+        }
+        
+        // Response Body (if available and not too large)
+        if (response.content && response.content.text && response.content.text.length < 50000) {
+          detailHtml += '<div style="margin-bottom: 12px;">';
+          detailHtml += '<div style="font-weight: 500; margin-bottom: 4px; font-size: 12px;">📦 Response Body</div>';
+          
+          let bodyText = response.content.text;
+          const mimeType = response.content.mimeType || '';
+          
+          // Try to format as JSON
+          if (mimeType.includes('json')) {
+            try {
+              const parsed = JSON.parse(bodyText);
+              bodyText = JSON.stringify(parsed, null, 2);
+            } catch (e) {
+              // Not valid JSON
+            }
+          }
+          
+          detailHtml += '<div class="code-block">' + escapeHtml(bodyText.substring(0, 10000)) + '</div>';
+          if (bodyText.length > 10000) {
+            detailHtml += '<div style="font-size: 11px; color: #5f6368; margin-top: 4px;">Truncated (showing first 10,000 characters)</div>';
+          }
+          detailHtml += '</div>';
+        }
+        
+        detailHtml += '</div>';
+      }
+      
+      detailHtml += '</div>';
+    }
+  }
+  
+  detailHtml += '<div style="margin-top: 16px; color: #5f6368;">Configure the request above and click "Send Request" to test this session.</div>';
+  
+  responsePanel.innerHTML = detailHtml;
 }
 
 // Send request with selected session
@@ -1160,6 +1407,28 @@ function exportCookies(format = 'our') {
     });
     
     filename = 'cookies-' + timestamp + '.json';
+  } else if (format === 'editthiscookie') {
+    // EditThisCookie format: array similar to Cookie-Editor but different sameSite values
+    exportData = selectedCookies.map((cookie, index) => {
+      const editThisCookieFormat = {
+        domain: cookie.domain,
+        expirationDate: cookie.expirationDate,
+        hostOnly: !cookie.domain.startsWith('.'),
+        httpOnly: cookie.httpOnly || false,
+        name: cookie.name,
+        path: cookie.path || '/',
+        sameSite: convertSameSiteToEditThisCookie(cookie.sameSite || 'no_restriction'),
+        secure: cookie.secure || false,
+        session: !cookie.expirationDate,
+        storeId: cookie.storeId || '0',
+        value: cookie.value,
+        id: index + 1
+      };
+      
+      return editThisCookieFormat;
+    });
+    
+    filename = 'cookies-' + timestamp + '.json';
   } else {
     // Our format: object with metadata
     exportData = {
@@ -1185,7 +1454,12 @@ function exportCookies(format = 'our') {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   
-  const formatName = format === 'cookie-editor' ? 'Cookie-Editor' : 'Our Format';
+  const formatNames = {
+    'cookie-editor': 'Cookie-Editor',
+    'editthiscookie': 'EditThisCookie',
+    'our': 'Our Format'
+  };
+  const formatName = formatNames[format] || 'Our Format';
   
   responsePanel.innerHTML = 
     '<div class="info-box">' +
@@ -1197,9 +1471,12 @@ function exportCookies(format = 'our') {
     (format === 'cookie-editor' 
       ? 'This file can be imported directly into Cookie-Editor extension.<br><br>'
       : '') +
+    (format === 'editthiscookie' 
+      ? 'This file can be imported directly into EditThisCookie extension.<br><br>'
+      : '') +
     'You can now:<br>' +
     '1. Review the JSON structure<br>' +
-    '2. Import into Cookie-Editor extension<br>' +
+    '2. Import into ' + (format === 'our' ? 'Session Replay' : 'cookie extension') + '<br>' +
     '3. Share cookies securely (if authorized)' +
     '</div>';
 }
@@ -1210,7 +1487,8 @@ function convertSameSiteToCookieEditor(sameSite) {
     'no_restriction': 'no_restriction',
     'lax': 'lax',
     'strict': 'strict',
-    'none': 'no_restriction'
+    'none': 'no_restriction',
+    'unspecified': 'no_restriction'
   };
   return map[sameSite] || 'no_restriction';
 }
@@ -1221,7 +1499,28 @@ function convertSameSiteFromCookieEditor(sameSite) {
     'no_restriction': 'no_restriction',
     'lax': 'lax',
     'strict': 'strict',
-    'none': 'no_restriction'
+    'none': 'no_restriction',
+    'unspecified': 'no_restriction'
+  };
+  return map[sameSite] || 'no_restriction';
+}
+
+function convertSameSiteToEditThisCookie(sameSite) {
+  const map = {
+    'no_restriction': 'unspecified',
+    'lax': 'lax',
+    'strict': 'strict',
+    'none': 'unspecified'
+  };
+  return map[sameSite] || 'unspecified';
+}
+
+function convertSameSiteFromEditThisCookie(sameSite) {
+  const map = {
+    'unspecified': 'no_restriction',
+    'lax': 'lax',
+    'strict': 'strict',
+    'no_restriction': 'no_restriction'
   };
   return map[sameSite] || 'no_restriction';
 }
@@ -1239,9 +1538,18 @@ function importCookies(file) {
       
       // Detect format
       if (Array.isArray(data)) {
-        // Cookie-Editor format: array of cookies
-        formatDetected = 'cookie-editor';
-        importedCookies = data.map(convertFromCookieEditorFormat);
+        // Array format - could be Cookie-Editor or EditThisCookie
+        // EditThisCookie uses "unspecified" for sameSite, Cookie-Editor uses "no_restriction"
+        const hasUnspecified = data.some(c => c.sameSite === 'unspecified');
+        const hasId = data.some(c => c.id !== undefined);
+        
+        if (hasUnspecified || hasId) {
+          formatDetected = 'editthiscookie';
+          importedCookies = data.map(convertFromEditThisCookieFormat);
+        } else {
+          formatDetected = 'cookie-editor';
+          importedCookies = data.map(convertFromCookieEditorFormat);
+        }
       } else if (data.cookies && Array.isArray(data.cookies)) {
         // Our format: object with cookies array
         formatDetected = 'our';
@@ -1249,7 +1557,8 @@ function importCookies(file) {
       } else {
         alert('Invalid cookie file format. Expected either:\n' +
               '1. Cookie-Editor format (array of cookies)\n' +
-              '2. Our format (object with "cookies" array)');
+              '2. EditThisCookie format (array of cookies)\n' +
+              '3. Our format (object with "cookies" array)');
         return;
       }
       
@@ -1271,7 +1580,12 @@ function importCookies(file) {
       displayCookieSelection();
       updateIncognitoButton();
       
-      const formatName = formatDetected === 'cookie-editor' ? 'Cookie-Editor' : 'Our Format';
+      const formatNames = {
+        'cookie-editor': 'Cookie-Editor',
+        'editthiscookie': 'EditThisCookie',
+        'our': 'Our Format'
+      };
+      const formatName = formatNames[formatDetected] || 'Unknown';
       
       responsePanel.innerHTML = 
         '<div class="info-box">' +
@@ -1308,6 +1622,31 @@ function convertFromCookieEditorFormat(cookieEditorCookie) {
   // Add expiration if present
   if (cookieEditorCookie.expirationDate) {
     ourFormat.expirationDate = cookieEditorCookie.expirationDate;
+  }
+  
+  // Build URL for this cookie
+  const protocol = ourFormat.secure ? 'https://' : 'http://';
+  const urlDomain = ourFormat.domain.startsWith('.') ? ourFormat.domain.substring(1) : ourFormat.domain;
+  ourFormat.url = protocol + urlDomain + ourFormat.path;
+  
+  return ourFormat;
+}
+
+// Convert EditThisCookie format to our internal format
+function convertFromEditThisCookieFormat(editThisCookie) {
+  const ourFormat = {
+    name: editThisCookie.name,
+    value: editThisCookie.value,
+    domain: editThisCookie.domain,
+    path: editThisCookie.path || '/',
+    secure: editThisCookie.secure || false,
+    httpOnly: editThisCookie.httpOnly || false,
+    sameSite: convertSameSiteFromEditThisCookie(editThisCookie.sameSite || 'unspecified')
+  };
+  
+  // Add expiration if present
+  if (editThisCookie.expirationDate) {
+    ourFormat.expirationDate = editThisCookie.expirationDate;
   }
   
   // Build URL for this cookie
